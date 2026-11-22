@@ -34,7 +34,7 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [x] (2026-11-22) Working directory relocated to `EMC2101_Fan_Speed_controller`; datasheet moved to `reference/` (will be gitignored); ExecPlan format adopted from the OpenAI cookbook template; hardware targets and pins confirmed from the MAX31760 sibling project.
 - [x] (2026-11-22) Pre-M1 hardware check on the Pico W bench (COM16): EMC2101 seen at 0x4C; identity registers FDh=0x16 / FEh=0x5D / FFh=0x01 all match datasheet expectations.
 - [x] (2026-11-22) `scripts/` tree created per user ruling (D23): bench-grouped test/diagnostic scripts are kept in the git tree; seeded with `scripts/pico/probe_bus.py` (verified green from the new location) and indexed in `scripts/README.md`.
-- [ ] M0 Repository foundation: git init, `.gitignore`, `AGENTS.md`, `LICENSE`, `pyproject.toml`, `README.md`, directory scaffold; first commit including `research/`.
+- [x] (2026-11-22) M0 Repository foundation complete: `git init -b main`; two commits — `edee0fc` scaffolding (`.gitignore`, `LICENSE` full LGPL-2.1 text with "or later" header, `pyproject.toml` v0.1.0, `requirements.txt`, `README.md`, `.github/workflows/ci.yml` four-gate matrix, `emc2101/__init__.py` stub, `.gitkeep` placeholders for `examples/`/`tests/`/`tools/`/`docs/`/`NOTES/`) and `1ba6c1f` planning trail (`AGENTS.md`, this file, `research/` ×7, `scripts/` ×2). Acceptance verified: `git check-ignore reference/EMC2101_datasheet.pdf` echoes the path (exit 0); `git ls-files` shows zero entries under `reference/` and all seven research documents tracked; working tree clean.
 - [ ] M1 Bench bring-up & characterization: probe at 0x4C, ID trio, single-byte/pointer behavior, interlock orders, TACH_M modes, conversion timing; write `NOTES/bench-characterization.md`.
 - [ ] M2 Package skeleton & transport layer: `_regs.py`, `_tables.py`, both transports, facades; probe/scan green on all three platforms; mocked transport tests.
 - [ ] M3 Core device API (no persistence): full property/verb surface; mock-backed unit suite green; api_coverage 100%.
@@ -163,6 +163,9 @@ Date/Author: 2026-11-22, user + agent.
 - Decision: D24 — adopt the sibling's generic (non-driver-specific) scaffolding: `.github/workflows/ci.yml` (four quality gates on push/PR, Python matrix) created in M0; `requirements.txt` (host deps) in M0; `tools/deploy_mp.py` (copy package `.py` files to `/lib/emc2101/` over mpremote, file-by-file) in M2; `CONTRIBUTING.md` in M5; `examples/README.md` index in M6; `.gitignore` broadened to the sibling's fuller set (packaging, venvs, tool caches, OS cruft).
 Rationale: user request (2026-11-22) to audit the MAX31760 tree for reusable scaffolding; these items are platform-generic and were absent from the M0–M6 scopes. Deliberately NOT adopted: `TODO.md` (superseded by this living ExecPlan), `SUMMARY.md`/`CODE_REVIEW_*`/`PLANS_0.1.1.md` (driver-specific retrospectives; the Outcomes & Retrospective section and revision notes serve that role, and the `PLANS_<version>.md` archive pattern applies at release), `tests/mock_i2c.py`/`fake_smbus.py` (M2/M3 implementation detail, already implied by the mock-backed suite requirement).
 Date/Author: 2026-11-22, user + agent.
+- Decision: D25 — single-controller bench rotation: only one physical EMC2101 breakout exists and it is moved between platforms; the validation order is fixed Pico W → ESP32-S3 → RPi 3A+, with code developed and solidified on the Pico W before rotating to the next bench (MAX31760 precedent).
+Rationale: user instruction (2026-11-22); constrains M1/M7 scheduling — no parallel bench work, each platform's characterization/E2E runs sequentially as the controller rotates.
+Date/Author: 2026-11-22, user.
 
 ## Outcomes & Retrospective
 
@@ -180,8 +183,9 @@ Markdown documents (the completed research phase: `README.md` index,
 `reference/EMC2101_datasheet.pdf` (SMSC EMC2101 datasheet Rev 2.54, 06-16-09, 57 pages —
 vendor copyright, gitignored); `AGENTS.md` (ExecPlan convention + ground rules); this file;
 and `scripts/` (bench-script tree per D23: `README.md` index plus `pico/probe_bus.py`,
-verified green against the live chip on 2026-11-22). There is no `.git` and no driver
-source code yet.
+verified green against the live chip on 2026-11-22). The directory became a Git
+repository on 2026-11-22 (M0: branch `main`, scaffolding and planning trail committed);
+no driver source code beyond the `emc2101/__init__.py` stub yet.
 The authoritative register-level reference is `research/emc2101-register-map.md`; the load-
 bearing facts are also embedded in this plan so it stays self-contained.
 
@@ -741,3 +745,8 @@ Revision note (2026-11-22): added D24 — generic scaffolding audit of the MAX31
 adopted `ci.yml` (M0), `requirements.txt` (M0), `deploy_mp.py` (M2), `CONTRIBUTING.md`
 (M5), `examples/README.md` (M6), broadened `.gitignore` (M0); declined TODO/SUMMARY/code-
 review archives as driver-specific or superseded by this ExecPlan.
+
+Revision note (2026-11-22): M0 marked complete in Progress (repository initialized,
+two commits, acceptance checks verified); added D25 — single-controller bench rotation
+order Pico W → ESP32-S3 → RPi 3A+ per user instruction; Context and Orientation updated
+to reflect the new repository state.
