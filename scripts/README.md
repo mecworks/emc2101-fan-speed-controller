@@ -27,3 +27,4 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | Script | Purpose |
 |--------|---------|
 | `probe_bus.py` | Connectivity probe: I2C0 scan + identity ping (FDh/FEh/FFh) against the real chip |
+| `probe_id.py` | Identity probe: reads 0x00/0xFD/0xFE/0xFF at 0x4C and prints each byte (M1 entry check) |
