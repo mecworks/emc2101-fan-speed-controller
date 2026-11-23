@@ -136,6 +136,34 @@ Driver consequence: a Status read taken at random has ~40 % odds of seeing
 BUSY=1; BUSY is purely informational — the result registers hold the last
 completed sample throughout, so reads never need to wait on BUSY.
 
+## Ambiguity dispositions (A1–A8, per `research/04-reference-notes.md` §3)
+
+M1 acceptance requires every ambiguity item explicitly resolved or
+deferred-with-reason:
+
+| # | Item | Disposition | Evidence / reason |
+|---|------|-------------|-------------------|
+| A1 | FILTER encoding duplication | Resolved by design; empirical shape check deferred to M7 | Encoder emits `00/01/11` for OFF/L1/L2 and decodes `10`→L1 (driver rule); live filter-response-shape verification folds into M7 E2E section 6 (`averaging_filter` round trip). |
+| A2 | Status bit 5 text (typo for -R) | Resolved by design | Bit treated as always-0 on the plain part and ignored in mask handling; bit 5 was clear in every live M1 status read (0x16, 0x00). |
+| A3 | Note 6.2 scope (CLK_OVR-divided clocks) | **Deferred — fan-blocked** | TACH_M sweep returned 0xFFFF at every mode/duty because no tach signal reaches the chip (see TACH section); re-run with a spinning fan at M7 (or earlier once the bench loadout is repaired). |
+| A4 | POLARITY default paragraph | Resolved by datasheet cross-check | Plain-part polarity is software-controlled, default 0; Table 6.18 POR default `20h` confirms it, and the post-desync `health_check.py` run read FAN_CFG at its POR value. |
+| A5 | TCRIT unlock lifecycle | **Deferred — deliberately not consumed** | Consuming the one-time unlock during characterization interacts ambiguously with restoration (per plan); it is exercised only in M7 where persistence needs it. Driver conservatively assumes TCRITOVRD stays set until power cycle. |
+| A6 | Receive Byte / pointer increment | **Resolved empirically** | No auto-increment; bare Receive/Send Byte forms desynchronize the SMBus interface (EIO, recovery on reconnect) — see Receive Byte section. Transport contract: register-addressed Write/Read Byte only. |
+| A7 | TACH counter clock (90 kHz vs implied 36 kHz) | Formula adopted; live check deferred with A3 | The published formula (validated against the Appendix B tables) is the driver's basis; live RPM-vs-formula verification needs a spinning fan — same blocker as A3. |
+| A8 | Spin-up FAST_TACH interaction | Resolved by documentation | Precedence documented as bypass > fast-tach-abort > timed; no bench experiment required. |
+
+Physical checks deferred with reason (M1 scope items c and g):
+
+- **ALERT pin idle state (interrupt mode)**: not measured — the bench wiring does
+  not expose the ALERT/TACH net to a Pico GPIO, and the fan-side wire is dead (see
+  Bench state). Interrupt-mode *logic* is nonetheless proven by the status
+  side-effect observation above; the pin-level check folds into M7 section 6
+  (faults/alerts) once the loadout is repaired.
+- **Breakout photograph / pull-up inventory**: not taken — photograph at the next
+  bench session; the DAC-mode caveat (FAN pull-up removal) is already documented
+  from the datasheet and the breakout product page, so nothing downstream is
+  blocked.
+
 ## Bench state (open items)
 
 Observed 2026-11-22 on the Pico W bench:
@@ -146,7 +174,9 @@ Observed 2026-11-22 on the Pico W bench:
 - **Fan/tach still dead**: TACH 0xFFFF at every manual duty level even with
   the diode healthy. Suspects: tach wire not on the ALERT/TACH pin, or the
   fan motor unpowered (FAN output is PWM only). Awaiting bench check;
-  blocks only the TACH-dependent sections above.
+  blocks only the TACH-dependent sections above. Per D26 these items are
+  formally deferred to the M7 re-test (or earlier, once the loadout is
+  repaired) and do not block M1 closure.
 
 ## Pending rotations (per D25)
 

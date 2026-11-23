@@ -35,8 +35,8 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [x] (2026-11-22) Pre-M1 hardware check on the Pico W bench (COM16): EMC2101 seen at 0x4C; identity registers FDh=0x16 / FEh=0x5D / FFh=0x01 all match datasheet expectations.
 - [x] (2026-11-22) `scripts/` tree created per user ruling (D23): bench-grouped test/diagnostic scripts are kept in the git tree; seeded with `scripts/pico/probe_bus.py` (verified green from the new location) and indexed in `scripts/README.md`.
 - [x] (2026-11-22) M0 Repository foundation complete: `git init -b main`; two commits — `edee0fc` scaffolding (`.gitignore`, `LICENSE` full LGPL-2.1 text with "or later" header, `pyproject.toml` v0.1.0, `requirements.txt`, `README.md`, `.github/workflows/ci.yml` four-gate matrix, `emc2101/__init__.py` stub, `.gitkeep` placeholders for `examples/`/`tests/`/`tools/`/`docs/`/`NOTES/`) and `1ba6c1f` planning trail (`AGENTS.md`, this file, `research/` ×7, `scripts/` ×2). Acceptance verified: `git check-ignore reference/EMC2101_datasheet.pdf` echoes the path (exit 0); `git ls-files` shows zero entries under `reference/` and all seven research documents tracked; working tree clean.
-- [ ] (2026-11-22) M1 in progress (Pico W portion): identity probe green (ID trio matches datasheet Rev 2.54); protocol probes complete — two-byte over-reads return silent 0xFF padding (no exception), bare Receive/Send Byte transactions desynchronize the chip's SMBus interface (EIO; recovers on reconnect), status-read auto-MASK side effect empirically confirmed; after user re-seated the diode pins: external temp live at 28.0 °C, interlock re-test clean (200 stable reads, 0/100 order deltas > 1 °C), BUSY cadence measured (~64 ms period ≈ 16/s default rate, ~26 ms high per window); TACH still 0xFFFF at all duties → fault isolated to the fan side (tach wiring or motor power), the only remaining M1 gap; results recorded in `NOTES/bench-characterization.md`.
-- [ ] M1 Bench bring-up & characterization: probe at 0x4C, ID trio, single-byte/pointer behavior, interlock orders, TACH_M modes, conversion timing; write `NOTES/bench-characterization.md`.
+- [x] (2026-11-22) M1 Bench bring-up & characterization complete (Pico W portion): identity probe green (ID trio 0x16/0x5D/0x01 matches datasheet Rev 2.54); protocol probes complete — two-byte over-reads return silent 0xFF padding (no exception), bare Receive/Send Byte transactions desynchronize the chip's SMBus interface (EIO; recovers on reconnect), status-read auto-MASK side effect empirically confirmed; after user re-seated the diode pins: external temp live at 28.0 °C, interlock re-test clean (200 stable reads, 0/100 order deltas > 1 °C), BUSY cadence measured (~64 ms period ≈ 16/s default rate, ~26 ms high per window); TACH still 0xFFFF at all duties → fault isolated to the fan side (tach wiring or motor power). All eight ambiguities A1–A8 explicitly disposed (resolved or deferred-with-reason) in `NOTES/bench-characterization.md`; fan-blocked items (A3 TACH_M sweep, A7 live RPM check, ALERT-pin idle state, breakout photo) deferred to the M7 re-test per D26. Acceptance met: notes file complete, ID trio recorded, single-byte and pointer behavior empirically confirmed.
+- [x] M1 Bench bring-up & characterization: probe at 0x4C, ID trio, single-byte/pointer behavior, interlock orders, TACH_M modes, conversion timing; write `NOTES/bench-characterization.md`.
 - [ ] M2 Package skeleton & transport layer: `_regs.py`, `_tables.py`, both transports, facades; probe/scan green on all three platforms; mocked transport tests.
 - [ ] M3 Core device API (no persistence): full property/verb surface; mock-backed unit suite green; api_coverage 100%.
 - [ ] M4 Persistence layer: JSON schema v1, save/load with validation and apply-ordering, atomic write; round-trip and corruption tests.
@@ -175,6 +175,9 @@ Date/Author: 2026-11-22, user + agent.
 - Decision: D25 — single-controller bench rotation: only one physical EMC2101 breakout exists and it is moved between platforms; the validation order is fixed Pico W → ESP32-S3 → RPi 3A+, with code developed and solidified on the Pico W before rotating to the next bench (MAX31760 precedent).
 Rationale: user instruction (2026-11-22); constrains M1/M7 scheduling — no parallel bench work, each platform's characterization/E2E runs sequentially as the controller rotates.
 Date/Author: 2026-11-22, user.
+- Decision: D26 — close M1 with explicit deferrals: the fan/tach channel is dead on the bench (TACH 0xFFFF at every duty even with the diode healthy; the fault isolates to tach wiring or fan motor power), so the fan-dependent M1 items — A3 TACH_M sweep conclusion, A7 live RPM-vs-formula check, ALERT-pin idle-state measurement, breakout photograph — are deferred to the M7 re-test (or earlier, as soon as the bench loadout is repaired) rather than blocking the milestone.
+Rationale: M1's purpose is de-risking silicon assumptions before driver code; every assumption the driver depends on (single-byte contract, pointer model, interlock safety, status side effects, conversion cadence, identity) is now empirically grounded. The remaining items concern the fan peripheral, not the chip's protocol, and M7's E2E matrix re-exercises them with the repaired loadout. Recorded 2026-11-22 after the diode re-seat; the fan-side suspect list lives in `NOTES/bench-characterization.md` (Bench state).
+Date/Author: 2026-11-22, agent (user informed; bench repair pending).
 
 ## Outcomes & Retrospective
 
@@ -672,8 +675,7 @@ the M8 push, which is gated behind the full M7 acceptance.
 
 Populated as milestones complete; keep entries concise and evidence-focused.
 
-- Bench characterization excerpt (M1): pending — ID trio readings, single-byte/pointer
-  confirmation, TACH_M observations, BUSY cadence, breakout pull-up notes.
+- Bench characterization excerpt (M1, Pico W, 2026-11-22): ID trio 0x16/0x5D/0x01 (plain EMC2101, Rev 2.54 match); over-reads pad silently with 0xFF (no exception); bare Receive/Send Byte desync the SMBus interface (EIO, recovers on reconnect) — register-addressed transactions only; interlock re-test clean (200 stable MSB-first reads at 28.0 °C, 0/100 alternating-order deltas > 1 °C); status read auto-set MASK (Config 0x00→0x80) per §6.4; BUSY cadence ~64 ms period ≈ 16/s, ~26 ms high per window; TACH 0xFFFF at all duties — fault isolated to fan side, TACH_M sweep (A3) and live RPM check (A7) deferred to M7 re-test per D26. Full detail: `NOTES/bench-characterization.md`.
 - E2E results table (M7): pending — rows for Pico W / ESP32-S3 / RPi 3A+, columns for smoke
   outcome, matrix outcome (section count), cold-boot scenario, date, firmware version.
 - Notable transcripts: pending — e.g. first `E2E HARDWARE MATRIX: PASS` per platform, any
@@ -759,3 +761,9 @@ Revision note (2026-11-22): M0 marked complete in Progress (repository initializ
 two commits, acceptance checks verified); added D25 — single-controller bench rotation
 order Pico W → ESP32-S3 → RPi 3A+ per user instruction; Context and Orientation updated
 to reflect the new repository state.
+
+Revision note (2026-11-22): M1 marked complete in Progress (both entries checked off);
+added D26 — fan-blocked M1 items (A3 sweep, A7 live RPM check, ALERT-pin idle state,
+breakout photo) formally deferred to the M7 re-test. `NOTES/bench-characterization.md`
+gained the A1–A8 ambiguity-disposition table plus the two deferred physical checks;
+Artifacts populated with the M1 benchmark excerpt.
