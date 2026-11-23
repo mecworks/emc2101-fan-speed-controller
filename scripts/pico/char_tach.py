@@ -65,15 +65,18 @@ for s in (0x0A, 0x17, 0x2E):
     print("  s=%02x (%.0f%%): count=%d rpm=%.0f" % (s, s / (2.0 * pwm_f) * 100.0, c, rpm_of(c)))
 
 # --- BUSY cadence ---------------------------------------------------------
-print("busy cadence (40 status polls, ~10 ms apart):")
+# 1 ms polling over 500 ms: catches the short BUSY-high episode around each
+# conversion (coarse 10 ms polling misses sub-ms pulses).
+print("busy cadence (1 ms polls, 500 ms window):")
 runs = []
 prev = None
 start = time.ticks_ms()
-for _ in range(40):
+while time.ticks_diff(time.ticks_ms(), start) < 500:
     b = (rb(0x02) >> 7) & 1
     if b != prev:
         runs.append("%d@%dms" % (b, time.ticks_diff(time.ticks_ms(), start)))
         prev = b
+    time.sleep_ms(1)
 print("  busy transitions: %s" % ", ".join(runs))
 
 # --- restore --------------------------------------------------------------

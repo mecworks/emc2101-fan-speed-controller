@@ -29,5 +29,6 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | `probe_bus.py` | Connectivity probe: I2C0 scan + identity ping (FDh/FEh/FFh) against the real chip |
 | `probe_id.py` | Identity probe: reads 0x00/0xFD/0xFE/0xFF at 0x4C and prints each byte (M1 entry check) |
 | `char_protocol.py` | M1 protocol probes: two-byte over-read behavior, interlock read orders (read-only) |
+| `char_interlock.py` | M1 interlock/torn-pair probe: 200 rapid MSB-first reads + 100 alternating-order rounds (read-only; needs live diode) |
 | `char_tach.py` | M1 TACH/TACH_M/manual-duty/BUSY probes (mutating; snapshots + restores 0x03/0x4A/0x4C) |
 | `health_check.py` | Responsiveness + state snapshot; clears scratchpads if dirty (pre/post mutating runs) |

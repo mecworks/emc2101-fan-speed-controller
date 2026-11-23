@@ -62,22 +62,26 @@ planned transport contract and forbids any future use of bare
 Receive/Send Byte forms. Recorded as a standing rule in
 `scripts/pico/char_protocol.py`'s docstring.
 
-### Data-read interlocks (`char_protocol.py`)
+### Data-read interlocks (`char_protocol.py`, `char_interlock.py`)
 
-External temperature decoded both ways, three trials each:
+Initial pass (diode open): both orders returned the open-circuit sentinel
+(+127.000 °C, raw 0x7F/0x00) — see "Bench state".
 
-| Trial | MSB-first (0x01→0x10) | LSB-first (0x10→0x01) |
-|---|---|---|
-| 0 | 127.000 °C | 127.000 °C |
-| 1 | 127.000 °C | 127.000 °C |
-| 2 | 127.000 °C | 127.000 °C |
+Re-test 2026-11-22 after the diode was connected (live conversion,
+external temp 28.0 °C):
 
-Both orders return the open-circuit sentinel (+127.000 °C, raw 0x7F/0x00) —
-see "Bench state". Torn-pair behavior could not be exercised because the
-channel carries no live conversion; the ordering rule stands on datasheet
-§6.1 authority and will be re-exercised once a diode is connected. TACH
-pair read LSB-first (0x46→0x47) returned 0xFFFF/0xFFFF with the input
-disabled at POR, as expected.
+| Probe | Result |
+|---|---|
+| 200 rapid MSB-first reads | min=max=28.0 °C, 1 distinct value |
+| 100 rounds back-to-back MSB-first vs LSB-first | 0 rounds with delta > 1 °C |
+
+No torn-pair behavior observable: the two bytes present a consistent pair
+across rapid alternating-order reads (either updated atomically at
+conversion completion, or slow thermal drift never straddled a conversion
+boundary within a round). The MSB-first rule stands as the safe convention
+per datasheet §6.1; the driver enforces it by construction. TACH pair read
+LSB-first (0x46→0x47) returns 0xFFFF/0xFFFF with the input disabled at
+POR, as expected.
 
 ### Status-register side effects (observed)
 
@@ -88,10 +92,10 @@ status read clears latches and auto-sets MASK if any non-BUSY/non-FAULT bit
 was set). Empirically confirmed; the driver's `service_alert()` semantics
 rest on this. MASK was cleared back to POR (0x00) after observation.
 
-### TACH exercise & TACH_M sweep (`char_tach.py`) — ANOMALY
+### TACH exercise & TACH_M sweep (`char_tach.py`) — STILL BLOCKED ON FAN
 
-With ALT_TCH enabled (Config bit 2), TACH count read **0xFFFF at every
-duty level**:
+With ALT_TCH enabled (Config bit 2), TACH count reads **0xFFFF at every
+duty level**, unchanged after the diode fix (re-run 2026-11-22):
 
 | Condition | Count | Implied RPM |
 |---|---|---|
@@ -102,38 +106,47 @@ duty level**:
 | Manual duty 100 % (S=0x2E) | 65535 | 82 (sentinel) |
 
 0xFFFF at 100 % drive rules out "fan slower than min detectable RPM"
-(~82 RPM floor); the tach signal is simply not reaching the chip. Combined
-with the open diode channel (below), the likely cause is bench loadout:
-fan and/or diode not currently connected to the breakout. **PENDING** bench
-verification and re-test. The TACH_M sweep is therefore inconclusive for
-ambiguity A3 (CLK_OVR-divided clock vs Note 6.2 scope) — re-run with a
-spinning fan.
+(~82 RPM floor); no tach signal reaches the chip. Since the diode channel
+is now proven healthy, the fault isolates to the fan side: tach wire not
+connected to the ALERT/TACH pin, or the fan motor unpowered (the FAN output
+is PWM only — the fan needs its own supply). **PENDING** bench verification
+and re-test. The TACH_M sweep is therefore inconclusive for ambiguity A3
+(CLK_OVR-divided clock vs Note 6.2 scope) — re-run with a spinning fan.
 
 Restore verification: PASS (cfg/fcfg/fsetting all returned to snapshot).
 
-### BUSY cadence (`char_tach.py`) — confounded
+### BUSY cadence (`char_tach.py`) — MEASURED
 
-40 status polls ~10 ms apart: BUSY high for one ~17 ms episode at the start,
-low thereafter. With the diode open the 21 ms external conversion appears
-not to run, leaving only the 3 ms internal conversion — too short to catch
-reliably at 10 ms polling. **PENDING** re-test with diode connected
-(expected: periodic BUSY episodes ≈ tCONV at 16/s rate, i.e. roughly every
-62.5 ms).
+1 ms polling over a 500 ms window (diode connected, default 16/s rate):
 
-## Bench state (blocking items)
+```
+busy transitions: 0@1ms, 1@12ms, 0@38ms, 1@76ms, 0@102ms, 1@140ms,
+                  0@166ms, 1@204ms, 0@231ms, 1@268ms, 0@295ms,
+                  1@333ms, 0@359ms, 1@397ms, 0@423ms, 1@461ms, 0@487ms
+```
+
+- Period between rising edges: 64, 64, 64, 64, 65, 64, 64 ms → **~64 ms
+  cadence ≈ 16 conversions/s** (default RATE), confirming the default
+  sampling rate on live silicon.
+- BUSY-high duration: 26–27 ms per episode (1 ms poll quantization) → the
+  chip asserts BUSY for **~26 ms of every 64 ms window** (~40 %) around
+  each external conversion.
+
+Driver consequence: a Status read taken at random has ~40 % odds of seeing
+BUSY=1; BUSY is purely informational — the result registers hold the last
+completed sample throughout, so reads never need to wait on BUSY.
+
+## Bench state (open items)
 
 Observed 2026-11-22 on the Pico W bench:
 
-- External diode channel **OPEN**: raw 0x7F/0x00 (+127.000 °C sentinel),
-  status FAULT bit set (status 0x16: FAULT + EXT_HIGH). The 2N3906 PNP
-  diode is either not connected to DP/DN on the Adafruit 4808 breakout or
-  its wiring is faulty.
-- No tach pulses observed at any fan duty (TACH 0xFFFF throughout),
-  consistent with the fan not being connected to the FAN output / ALERT-TACH
-  pin, or not spinning.
-
-Awaiting user confirmation of bench loadout before re-running the
-diode-dependent and TACH-dependent sections.
+- ~~External diode channel OPEN~~ **RESOLVED** (user re-seated the diode
+  pins): raw 0x1C/0xC0 = 28.0 °C, status 0x00 (no FAULT), stable across
+  200 reads.
+- **Fan/tach still dead**: TACH 0xFFFF at every manual duty level even with
+  the diode healthy. Suspects: tach wire not on the ALERT/TACH pin, or the
+  fan motor unpowered (FAN output is PWM only). Awaiting bench check;
+  blocks only the TACH-dependent sections above.
 
 ## Pending rotations (per D25)
 
