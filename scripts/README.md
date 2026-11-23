@@ -36,3 +36,15 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | `char_tach_diag.py` | M1 follow-up: chip-side TACH diagnostics — ALT_TCH latch check, TACH_M write acceptance (A3), CLK_SEL=1 trial (mutating; snapshots + restores 0x03/0x4A/0x4C) |
 | `char_tach_pwm_gate.py` | M1 follow-up (round 2): TACH-vs-PWM gating check — count at as-found setting vs 50 % drive, validates the RPM formula live (mutating; snapshots + restores 0x03/0x4C) |
 | `probe_pkg.py` | M2 acceptance: exercises the deployed `emc2101` package end-to-end (verify/probe/scan); read-only (requires `tools/deploy_mp.py` first) |
+
+## esp32/
+
+| Script | Purpose |
+|--------|---------|
+| `smoke_import.py` | M2 acceptance (ESP32-S3 leg): deploy + import + construct the package without touching the bus (chip not required); hardware-free helper assertions (requires `tools/deploy_mp.py --port COM7` first) |
+
+## rpi/
+
+| Script | Purpose |
+|--------|---------|
+| `smoke_import.py` | M2 acceptance (RPi 3A+ leg): CPython import + smbus2 dependency check + adopted-handle construction without opening a bus (chip not required); run on the Pi after SCP-ing the package alongside it |
