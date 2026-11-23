@@ -60,7 +60,7 @@ item in this document.
 
 | MAX31760 | EMC2101 | Verdict | Notes |
 |---|---|---|---|
-| `manual` (CR2.DFC; True = manual) | `manual` (**~PROG**; True = manual) | ADAPTED | Same public meaning; underlying bit polarity inverted. Side effect documented: toggling also flips LUT/Fan-Setting writability (Q4) |
+| `manual` (CR2.DFC; True = manual) | `manual` (**PROG**; True = manual) | ADAPTED | Same public meaning; PROG=1 makes Fan Setting/LUT writable (§6.18, Q4). Side effect documented: toggling also flips LUT/Fan-Setting writability. Erratum 2026-11-22: originally recorded as ~PROG following the M3 implementation, which had the polarity inverted; live evidence (M6 smoke: duty writes dropped after `manual=True`) plus register-map §6.18 confirmed PROG=1 = manual and the driver was fixed. |
 | `set_duty_pct(pct)` | `set_duty_pct(pct)` | ADAPTED | Quantizes through current PWM_F grid (effective duty = S/(2·PWM_F), Q7); ValueError outside 0..100 |
 | `duty_cmd_raw` (0..255) | `duty_cmd_raw` (0..63) | ADAPTED | Range follows 6-bit Fan Setting |
 | `actual_duty_raw` / `actual_duty_pct` (RO feedback reg) | — | N-A | No actual-duty feedback register exists (Q14) |

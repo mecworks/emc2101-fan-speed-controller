@@ -60,7 +60,7 @@ def base_image():
     r[REG_TCRIT_HYST] = 10
     r[REG_TACH_LIMIT_LO] = 0xFF
     r[REG_TACH_LIMIT_HI] = 0xFF
-    r[REG_FAN_CFG] = FCFG_PROG                # LUT mode
+    r[REG_FAN_CFG] = FCFG_PROG                # manual mode (PROG=1, POR default)
     r[REG_SPINUP] = SU_FAST_TACH | SU_DRIVE_100 | 0x07
     r[REG_FAN_SETTING] = 0x00
     r[REG_PWM_F] = 0x17                       # 23
@@ -267,7 +267,7 @@ class TestCollectState(unittest.TestCase):
                          r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         self.assertEqual(s["device"]["mfg_id"], "0x5d")
         self.assertEqual(s["device"]["revision"], "0x01")
-        self.assertFalse(s["fan"]["manual"])
+        self.assertTrue(s["fan"]["manual"])
         self.assertAlmostEqual(s["fan"]["duty_pct"], 0.0)
         self.assertEqual(s["misc"]["tach_limit_count"], 0xFFFF)
         self.assertEqual(s["misc"]["averaging_filter"], "off")
@@ -361,7 +361,7 @@ class TestApplyState(unittest.TestCase):
         img[REG_FAN_CFG] = FCFG_POLARITY | FCFG_CLK_OVR  # LUT mode start
         source = FakeTransport(registers=img)
         state = _persist.collect_state(source.read_byte)
-        state["fan"]["manual"] = True             # stored PROG = 0
+        state["fan"]["manual"] = False            # stored PROG = 0
         target = FakeTransport(registers=dict(img))
         _persist.apply_state(target.write_byte, target.read_byte, state)
         seq = [v for _, v in write_entries(target.log, REG_FAN_CFG)]

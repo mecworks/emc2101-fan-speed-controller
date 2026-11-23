@@ -489,7 +489,7 @@ def collect_state(read_byte):
             "entries": entries,
         },
         "fan": {
-            "manual": not (fc & FCFG_PROG),
+            "manual": bool(fc & FCFG_PROG),
             "duty_pct": setting_to_duty_pct(fs, deq_grid),
             "output_inverted": bool(fc & FCFG_POLARITY),
             "clk_sel": clk_sel,
@@ -675,7 +675,7 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
         fc_final |= FCFG_CLK_OVR
     if fa["force"]["enabled"]:
         fc_final |= FCFG_FORCE
-    if not fa["manual"]:
+    if fa["manual"]:
         fc_final |= FCFG_PROG
     wr(REG_FAN_CFG, fc_final)
     su = 0

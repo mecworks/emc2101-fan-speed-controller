@@ -25,20 +25,20 @@ def writes_of(t, reg):
 
 
 class ManualModeTestCase(unittest.TestCase):
-    def test_manual_true_when_prog_cleared(self):
-        dev, _ = make_dev({REG_FAN_CFG: 0x0A})
+    def test_manual_true_when_prog_set(self):
+        dev, _ = make_dev({REG_FAN_CFG: 0x2A})
         self.assertTrue(dev.manual)
 
-    def test_manual_false_when_prog_set(self):
-        dev, _ = make_dev({REG_FAN_CFG: 0x2A})
+    def test_manual_false_when_prog_cleared(self):
+        dev, _ = make_dev({REG_FAN_CFG: 0x0A})
         self.assertFalse(dev.manual)
 
     def test_setter_flips_only_prog_bit(self):
-        dev, t = make_dev({REG_FAN_CFG: 0x2A})
+        dev, t = make_dev({REG_FAN_CFG: 0x0A})
         dev.manual = True
-        self.assertEqual(writes_of(t, REG_FAN_CFG)[-1], 0x0A)
-        dev.manual = False
         self.assertEqual(writes_of(t, REG_FAN_CFG)[-1], 0x2A)
+        dev.manual = False
+        self.assertEqual(writes_of(t, REG_FAN_CFG)[-1], 0x0A)
 
 
 class DutyTestCase(unittest.TestCase):

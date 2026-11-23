@@ -505,19 +505,20 @@ class EMC2101:
 
     @property
     def manual(self):
-        """True when Fan Setting drives the fan directly (~PROG).
+        """True when Fan Setting drives the fan directly (PROG=1).
 
         NOTE: toggling this also flips the writability of the Fan Setting
-        and LUT registers (RO while manual is False / LUT mode)."""
-        return not (self._t.read_byte(REG_FAN_CFG) & FCFG_PROG)
+        and LUT registers (RO while manual is False / LUT mode). The chip
+        powers on with PROG=1 (FAN_CFG default 20h), i.e. manual."""
+        return bool(self._t.read_byte(REG_FAN_CFG) & FCFG_PROG)
 
     @manual.setter
     def manual(self, value):
         fc = self._t.read_byte(REG_FAN_CFG)
         if value:
-            fc &= ~FCFG_PROG
-        else:
             fc |= FCFG_PROG
+        else:
+            fc &= ~FCFG_PROG
         self._t.write_byte(REG_FAN_CFG, fc)
 
     def set_duty_pct(self, pct):

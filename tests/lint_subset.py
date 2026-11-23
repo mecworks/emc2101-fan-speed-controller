@@ -10,14 +10,17 @@ Checks (per AGENTS.md ground rules):
 (f-strings ARE allowed: MicroPython supports PEP 498 from v1.17; the
 project baseline is v1.29.0. @property is likewise allowed.)
 Shared files: _regs.py, _core.py, _faults.py, _tables.py, _persist.py,
-_transport_mp.py, mp.py, __init__.py. Exempt (CPython-only by design): _transport_cp.py, cp.py.
-examples/ joins the file set when it lands (M6).
+_transport_mp.py, mp.py, __init__.py, plus every examples/*.py script
+(they run on MicroPython). Exempt (CPython-only by design):
+_transport_cp.py, cp.py.
 
-Note on the import ban: it targets CPython-only stdlib. `json`, `time`
-and `os` ARE allowed because they ship with MicroPython v1.29.0 on both
-target ports (Pico W / ESP32-S3); M4's persistence layer uses json/time
-in _persist.py and os (guarded, function-level) for the atomic-rename
-file glue in _core.py, degrading to a plain overwrite where unsupported.
+Note on the import ban: it targets CPython-only stdlib. `json`, `time`,
+`os` and `sys` ARE allowed because they ship with MicroPython v1.29.0 on
+both target ports (Pico W / ESP32-S3); M4's persistence layer uses
+json/time in _persist.py and os (guarded, function-level) for the
+atomic-rename file glue in _core.py, degrading to a plain overwrite where
+unsupported, and the examples use sys.platform/os.uname() for board-aware
+pin selection.
 """
 import ast
 import py_compile
@@ -32,9 +35,14 @@ SHARED = [
     "emc2101/_transport_mp.py",
     "emc2101/mp.py",
     "emc2101/__init__.py",
+    "examples/pico_demo.py",
+    "examples/esp32_demo.py",
+    "examples/rpi_demo.py",
+    "examples/hw_smoke_test.py",
+    "examples/e2e_hardware_test.py",
 ]
 BAD_MODULES = {
-    "sys", "struct", "logging", "subprocess", "threading",
+    "struct", "logging", "subprocess", "threading",
     "socket", "urllib", "http", "sqlite3", "smbus", "smbus2", "ctypes",
     "multiprocessing", "queue", "select", "signal", "typing",
 }
