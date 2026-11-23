@@ -1014,3 +1014,14 @@ smoke snapshot-capture, S4 raw-LUT capture/restore, and safety-net verification 
 tests (suite 264 → 267). Research note gained §16.5. All four host gates green (267 tests,
 api_coverage 203/203, lint clean, compileall clean). Pending: redeploy + 3× phase A→B cycles
 on COM16, then ESP32-S3 and RPi 3A+ legs.
+
+Revision note (2026-11-22, session close): M7 Pico W leg complete — after the D36 deploy,
+three consecutive full E2E phase A→B cycles PASSED on COM16 (including the previously
+failing persistence section) plus `hw_smoke_test.py` PASS; committed as `7c8dcb4`. The user
+confirmed the bench topology: a SINGLE fan-sensor board is physically rotated between the
+target devices, so the ESP32-S3 (COM7) and RPi 3A+ legs await physical moves and continue
+in the next session. M8 adjustment: the independent code review will be performed by a
+SEPARATE EXTERNAL agent arranged by the user (not spawned from this workspace); this agent
+then acts on that report (every finding fixed + gated, or declined + logged) before M9
+proceeds. Tree fully gated at session close (267 tests, api_coverage 203/203, lint clean,
+compileall clean).
