@@ -189,6 +189,9 @@ Date/Author: 2026-11-22, agent (user informed; bench repair pending).
 - Decision: D27 — amend D26: the TACH channel is repaired (external 10 kOhm pull-up added to the TACH net, 2026-11-22 round 2); A7 (live RPM-vs-formula check) is closed early with live data (~678 RPM at 0 % drive vs the ~660 RPM user-measured floor; ~1865 RPM at 50 % drive, monotonic); the remaining D26 deferrals stand as amended — A3 behavioral distinction (sub-min-RPM stall unreachable on this bench), ALERT-pin idle-state measurement, breakout photograph — all folding into M7.
 Rationale: the root cause (missing receiver-side pull-up) is confirmed by the before/after diagnostic runs; the fan-dependent characterization data the driver cares about (live RPM tracking duty) is now available and recorded in `NOTES/bench-characterization.md`. No milestone status change beyond closing the M1 follow-up thread.
 Date/Author: 2026-11-22, agent (user performed the bench repair).
+- Decision: D28 — refine D11: `reference/` is NOT blanket-gitignored; only individual copyrighted vendor files we cannot redistribute (currently `EMC2101_datasheet.pdf` and `emc2101-fan-controller-and-temperature-sensor.pdf`) are ignored by explicit filename. Other items placed in `reference/` (e.g. our own notes) remain committable.
+Rationale: user instruction (2026-11-22): the ignore policy targets copyright, not the directory.
+Date/Author: 2026-11-22, user.
 
 ## Outcomes & Retrospective
 
@@ -812,3 +815,8 @@ Surprise observation, `research/04-reference-notes.md` gained §5 (board
 guide jumpers; Source links renumbered §6 and extended), NOTES gained the
 mechanism paragraph, README gained a Hardware-notes section plus the board-
 guide reference link, and `.gitignore` gained an explicit entry for the PDF.
+
+Revision note (2026-11-22): D28 refines D11 — `reference/` is no longer
+blanket-gitignored; the two vendor PDFs are ignored by explicit filename so
+non-copyrighted items placed there stay committable. `.gitignore`,
+`AGENTS.md`, and the README layout table updated to match.

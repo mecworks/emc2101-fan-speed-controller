@@ -58,7 +58,7 @@ same chip works.
 | `scripts/` | Bench-grouped test/diagnostic scripts (real hardware required) |
 | `docs/` | Documentation (lands in milestone M5) |
 | `research/` | Committed research trail (register map, feasibility, parity mapping, …) |
-| `reference/` | Vendor materials (gitignored — copyrighted) |
+| `reference/` | Reference materials; copyrighted vendor files gitignored by filename (D28) |
 | `PLANS.md` | Living ExecPlan (milestones, decisions, progress) |
 | `AGENTS.md` | Ground rules for agents working in this repository |
 

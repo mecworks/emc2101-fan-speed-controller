@@ -20,8 +20,10 @@ frequently, and resolve ambiguities autonomously (recording them in the Decision
   (MicroPython) and `emc2101/cp.py` (CPython), both exposing the identical public API
   enforced by `tests/test_api_parity.py`.
 - `research/` holds the committed research trail; consult it before re-deriving register
-  facts. `reference/` holds vendor materials (datasheet PDF) and is gitignored — never
-  commit files from it.
+  facts. `reference/` holds reference materials; copyrighted vendor files we cannot
+  redistribute (currently the datasheet and the Adafruit board-guide PDFs) are
+  gitignored by explicit filename (D28) — never commit copyrighted material, but our
+  own notes placed there may be committed.
 - Clean-room policy: the Adafruit CircuitPython library and other third-party drivers are
   reference material only; do not copy their code into this package.
 - Hardware benches (inherited from the MAX31760 project): Pico W RP2040 @ COM16, I2C0

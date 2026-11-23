@@ -23,9 +23,10 @@ coverage.xml
 htmlcov/
 
 # Vendor documentation (copyrighted — local reference copies only,
-# never redistribute; canonical URLs in README.md "References")
-reference/
-# Adafruit product 4808 board guide (pull-up jumper facts, page 7)
+# never redistribute; canonical URLs in README.md "References").
+# Ignored by filename per D28: other items in reference/ (e.g. our own
+# notes) remain committable.
+reference/EMC2101_datasheet.pdf
 reference/emc2101-fan-controller-and-temperature-sensor.pdf
 
 # OS cruft
