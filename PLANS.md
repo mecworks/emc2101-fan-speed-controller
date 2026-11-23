@@ -54,6 +54,7 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [ ] M7 Hardware E2E validation: smoke + full matrix PASS on Pico W, ESP32-S3, RPi 3A+; results recorded in Artifacts.
 - [~] (2026-11-22) M7 in progress — Pico W leg: E2E phase A (full matrix + cold-boot profile staging) passes all sections; phase B initially FAILED in the persistence section (`0x4c expected 0x2c got 0x0c`), root-caused to the undocumented PROG=0 mirror/drop behavior (Surprise above; D35). Fix implemented in `_persist.py` (collect + strict read-back dances), `examples/e2e_hardware_test.py` (snapshot dance, S4 LUT capture/restore dance, safety-net repair under PROG=1) and `examples/hw_smoke_test.py` (same snapshot/restore discipline); `research/emc2101-register-map.md` gained §16 (four live observations incl. Table 6.28 POR LUT default 3Fh). Host gates green: 264 tests OK, api_coverage 100 % (203/203), lint clean, compileall clean. Pending: redeploy + rerun both phases on COM16, then ESP32-S3 (COM7) and RPi 3A+ legs.
 - [~] (2026-11-22) M7 in progress — second phase-B failure mode root-caused and fixed (D36): after the D35 fix, uninstrumented phase-B runs still failed intermittently with `0x4c expected 0x29 got 0xc` while an instrumented run (per-transaction logging adding µs-scale overhead per I²C op) passed the full matrix. Forensics (trace-log retrieval via `mpremote cat`, burst analysis of the passing trace, step-by-step probes) established that the Fan Setting READ-OUT lags one temperature-conversion window (~64 ms at 16/s) after a FAN_CFG PROG-bit transition, keeping the previously active drive source visible; writes stick immediately, so step-by-step probes with explicit sleeps never reproduced it. Fix: `_persist._settle_ms()` (portable 100 ms settle, `SETTLE_MS`) called after every PROG-on transition before fan-domain reads in `collect_state`, plus a settle-and-retry-once pass over disagreeing registers in the `apply_state` strict read-back; the E2E/smoke snapshot-capture dances, S4 raw-LUT capture/restore, and safety-net verification got the same 0.1 s settle. `MirrorTransport` now models the stale read-out window (`settled()` advances it; module-level fake settle keeps the suite sleep-free) and three new regression tests pin the behavior (collect settles, strict retry absorbs the stale mirror, genuine mismatches still fail after retry). Research note gained §16.5. Host gates green: 267 tests OK, api_coverage 100 % (203/203), lint clean, compileall clean. Pending: redeploy + 3× phase A→B cycles on COM16, then ESP32-S3 (COM7) and RPi 3A+ legs.
+- [~] (2026-11-23) M7 in progress — Pico W leg CLOSED and ESP32-S3 leg COMPLETE. Pico W (COM16): after the D36 deploy, three consecutive full E2E phase A→B cycles PASSED (persistence section included) plus `hw_smoke_test.py` PASS; committed as `7c8dcb4`. Board rotated to the ESP32-S3 bench (single-board rotation confirmed by user). ESP32-S3 (COM7, I2C0 SDA=GPIO41/SCL=GPIO42, MicroPython v1.29.0): comms established (scan `[0x4c]`; identity trio 0x16/0x5D/0x01 exact match); `hw_smoke_test.py` PASS (duty quantization identical to the Pico — raw 12/23/34/46 on the 0x17 grid; settled 2123 RPM > 500 floor; strict persistence round trip clean; 40-reg safety-net restore byte-for-byte); E2E phase A all sections PASS with profile staging + soft reset; phase B PASSED twice (two full A→B cycles), each verifying the constructor cold-boot auto-load (local high 65 C, scratchpad 0xAB, LUT entry 0 @ 30 C) before the full eleven-section matrix (`E2E HARDWARE MATRIX: PASS`). Notable: this bench has the fan AND diode connected (live tach ~2100–2300 RPM, remote temp ~28 °C, diode-fault negative check passes) — unlike the Pico bench's open diode channel; the PSRAM init errors in the ESP32-S3 boot log are a module-firmware artifact (no PSRAM populated) and do not affect MicroPython or I²C. One operational note: mpremote can linger in a REPL follow-loop after the phase-A soft reset and hold the port; kill the stale process before the phase-B run. Remaining: RPi 3A+ leg (SMBus bus 1, CPython facade, fresh-instance approximation for phase B), then results table + gate.
 - [ ] M8 Independent code review: independent agent reviews the full tree after M7; every finding addressed (fixed + gated, or declined + logged) before M9 proceeds.
 - [ ] M9 GitHub publication: create public repo, push full history, verify.
 
@@ -773,8 +774,15 @@ the M9 push, which is gated behind the full M7 acceptance and the closed M8 revi
 Populated as milestones complete; keep entries concise and evidence-focused.
 
 - Bench characterization excerpt (M1, Pico W, 2026-11-22): ID trio 0x16/0x5D/0x01 (plain EMC2101, Rev 2.54 match); over-reads pad silently with 0xFF (no exception); bare Receive/Send Byte desync the SMBus interface (EIO, recovers on reconnect) — register-addressed transactions only; interlock re-test clean (200 stable MSB-first reads at 28.0 °C, 0/100 alternating-order deltas > 1 °C); status read auto-set MASK (Config 0x00→0x80) per §6.4; BUSY cadence ~64 ms period ≈ 16/s, ~26 ms high per window; TACH 0xFFFF at all duties — fault isolated to fan side, TACH_M sweep (A3) and live RPM check (A7) deferred to M7 re-test per D26. Full detail: `NOTES/bench-characterization.md`.
-- E2E results table (M7): pending — rows for Pico W / ESP32-S3 / RPi 3A+, columns for smoke
-  outcome, matrix outcome (section count), cold-boot scenario, date, firmware version.
+- E2E results table (M7):
+
+  | Platform | Firmware | Smoke | Matrix (sections) | Cold-boot scenario | Date |
+  |---|---|---|---|---|---|
+  | Pico W (COM16) | MicroPython v1.29.0 | PASS | PASS (11/11) ×3 consecutive A→B cycles | staged profile + `machine.reset()`, constructor auto-load verified | 2026-11-22 |
+  | ESP32-S3 (COM7) | MicroPython v1.29.0 | PASS | PASS (11/11) ×2 A→B cycles | staged profile + `machine.reset()`, constructor auto-load verified | 2026-11-23 |
+  | RPi 3A+ (bus 1) | CPython / smbus2 | pending | pending | fresh-instance approximation (no host-side power cycle) | pending |
+
+  Notes: duty quantization identical across both MCU benches (raw 12/23/34/46 on the POR 0x17 PWM_F grid); the ESP32 bench additionally exercises live tach (~2100–2300 RPM) and a connected diode channel (~28 °C remote).
 - Notable transcripts: pending — e.g. first `E2E HARDWARE MATRIX: PASS` per platform, any
   silicon-delta discovery with its fix commit.
 - Code review findings log (M8): pending — findings with severities and closure status
@@ -1025,3 +1033,13 @@ SEPARATE EXTERNAL agent arranged by the user (not spawned from this workspace); 
 then acts on that report (every finding fixed + gated, or declined + logged) before M9
 proceeds. Tree fully gated at session close (267 tests, api_coverage 203/203, lint clean,
 compileall clean).
+
+Revision note (2026-11-23): M7 ESP32-S3 leg recorded — board rotated from the Pico W bench
+(single-board rotation), comms established on COM7 (scan [0x4c], identity trio exact),
+hw_smoke_test PASS, and two full E2E phase A→B cycles PASSED including the constructor
+cold-boot auto-load verification; results table in Artifacts now holds the Pico W and
+ESP32-S3 rows. No code changes were needed for this leg — the D35/D36 fixes carried over
+unchanged. Operational notes captured: mpremote can hold the port in a REPL follow-loop
+after the phase-A soft reset (kill the stale process before phase B); the ESP32-S3 module's
+PSRAM boot errors are cosmetic; this bench has fan + diode connected (live tach and remote
+temperature exercised). Remaining: RPi 3A+ leg, then gate.
