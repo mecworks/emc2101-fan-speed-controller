@@ -5,9 +5,22 @@ SMSC/Microchip **EMC2101** SMBus fan controller from ordinary Python on a
 Raspberry Pi Pico W (MicroPython), an ESP32-S3 (MicroPython), and a
 Raspberry Pi 3A+ (CPython/smbus2).
 
-**Status: under active development.** Milestones, decisions, and progress
-live in [`PLANS.md`](PLANS.md) (the living ExecPlan). The package is not
-usable until milestone M2 lands.
+**Status: under active development** — milestones M0–M4 are complete
+(package, protocol API, persistence) with live-silicon acceptance on the
+Pico W bench; see [`PLANS.md`](PLANS.md) (the living ExecPlan) for
+milestones, decisions, and progress.
+
+## Documentation
+
+- [Quickstart](docs/quickstart.md) — install per platform, first program,
+  LUT control, save/load config
+- [API reference](docs/api-reference.md) — every public member
+- [Wiring guide](docs/wiring.md) — STEMMA QT/Qwiic + raw I²C, pin tables,
+  pull-up rules
+- [Persistence](docs/persistence.md) — JSON schema v1 semantics
+- [Operational notes](docs/operational-notes.md) — cold-boot window,
+  TCRIT lifecycle, ALERT/TACH trade-offs, ARA, force-register testing
+- [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ## What you can do with it (target capability)
 
@@ -56,7 +69,7 @@ same chip works.
 | `tests/` | Host-runnable mock-backed unit/integration suite + lint gate |
 | `tools/` | Hardware-free dev utilities (API coverage, deploy helper) |
 | `scripts/` | Bench-grouped test/diagnostic scripts (real hardware required) |
-| `docs/` | Documentation (lands in milestone M5) |
+| `docs/` | Documentation: quickstart, API reference, wiring guide, persistence, operational notes |
 | `research/` | Committed research trail (register map, feasibility, parity mapping, …) |
 | `reference/` | Reference materials; copyrighted vendor files gitignored by filename (D28) |
 | `PLANS.md` | Living ExecPlan (milestones, decisions, progress) |
