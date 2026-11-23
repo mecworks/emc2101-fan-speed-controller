@@ -50,7 +50,8 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [ ] M5 Quality gates & docs: lint gate, coverage tool, `docs/`, README polish, CHANGELOG.
 - [ ] M6 Examples: three platform demos, `hw_smoke_test.py`, `e2e_hardware_test.py`.
 - [ ] M7 Hardware E2E validation: smoke + full matrix PASS on Pico W, ESP32-S3, RPi 3A+; results recorded in Artifacts.
-- [ ] M8 GitHub publication: create public repo, push full history, verify.
+- [ ] M8 Independent code review: independent agent reviews the full tree after M7; every finding addressed (fixed + gated, or declined + logged) before M9 proceeds.
+- [ ] M9 GitHub publication: create public repo, push full history, verify.
 
 ## Surprises & Discoveries
 
@@ -221,6 +222,9 @@ Date/Author: 2026-11-22, agent.
 - Decision: D32 — `json`, `time`, and `os` are permitted imports in shared (MicroPython-shipped) modules, removing them from `tests/lint_subset.py`'s BAD_MODULES.
 Rationale: all three ship with MicroPython v1.29.0 on both target ports (rp2 and esp32); M4 legitimately needs `json` (serialization), `time.gmtime` (UTC timestamps), and `os` (file ops/rename). The lint gate's purpose is CPython-only constructs, not stdlib breadth; the rationale is recorded in the lint file's docstring.
 Date/Author: 2026-11-22, agent.
+- Decision: D33 — insert a new milestone M8 (independent code review) between M7 and publication; the former M8 (GitHub publication) is renumbered to M9. An independent agent reviews the full tree after M7; every finding must be addressed — fixed with all four quality gates green, or explicitly declined with rationale in this log — before M9 may proceed.
+Rationale: user instruction (2026-11-22): an outside set of eyes on the complete tree before anything is published; publication is the one irreversible external action, so it now sits behind both the M7 hardware acceptance and the closed M8 review.
+Date/Author: 2026-11-22, user.
 
 ## Outcomes & Retrospective
 
@@ -311,12 +315,14 @@ with the same chip are supported by virtue of the fixed address and identical re
 
 ## Plan of Work
 
-The work proceeds through nine milestones, M0 through M8, in strict order. Each milestone is
+The work proceeds through ten milestones, M0 through M9, in strict order. Each milestone is
 independently verifiable: it ends with a concrete artifact and an observable acceptance check
 detailed under Concrete Steps. Milestones M0–M6 are host-side (Windows dev machine) except
-M1, which needs the bench; M7 needs all three boards; M8 needs network access to GitHub. The
+M1, which needs the bench; M7 needs all three boards; M8 is a review gate with no external
+dependencies; M9 needs network access to GitHub. The
 sequence mirrors the research-phase phase plan P0–P6 (`research/01-feasibility-effort.md` §7),
-with M0 added for repository foundation and M8 for publication.
+with M0 added for repository foundation, M8 for the independent code review, and M9 for
+publication.
 
 ### M0 — Repository foundation
 
@@ -526,7 +532,23 @@ evidence, and noted in `NOTES/bench-characterization.md`. Results are tabulated 
 (platform × section outcomes, with dates). Acceptance: smoke PASS and matrix PASS on all
 three platforms; results table recorded; no open failures.
 
-### M8 — GitHub publication
+### M8 — Independent code review
+
+Scope: an independent agent (not the implementing agent) reviews the complete tree as of the
+end of M7 — package source, tests, tools, scripts, examples, docs, and the research trail —
+against the datasheet facts in `research/`, the decisions in this plan, and general
+correctness/security/maintainability standards. Findings are recorded in this plan (a
+dedicated subsection under Surprises & Discoveries if numerous) with severity
+(blocker/high/medium/low/nit), location, and description. Every finding must be addressed
+before M9 proceeds: fixed in a commit that keeps all four quality gates green, or explicitly
+declined with a rationale recorded in the Decision Log. Review scope includes at least:
+protocol correctness (interlocks, retry ladder, destructive-read discipline), persistence
+validation completeness, API-surface consistency with the docs, MicroPython subset
+compliance, test-quality gaps, and documentation accuracy. Acceptance: findings list
+complete; every item closed (fixed + gated, or declined + logged); no open blocker or
+high-severity items.
+
+### M9 — GitHub publication
 
 Scope: publish the validated repository. Resolve the account login via the GitHub API
 (`get_me`). Create the public repository `emc2101-fan-speed-controller` (no auto-init; the
@@ -662,7 +684,16 @@ M7 — Hardware E2E validation (per platform; substitute the correct serial port
     #   3. construct EMC2101(i2c, config_file=<path>) and assert the applied values
     # record all outcomes in PLANS.md Artifacts (results table) with dates.
 
-M8 — GitHub publication:
+M8 — Independent code review:
+
+    # hand the committed tree (HEAD after M7 gating) to the independent reviewer;
+    # record findings in PLANS.md (subsection under Surprises & Discoveries):
+    #   - id, severity (blocker/high/medium/low/nit), file:line, description
+    # address each finding: fix (commit, then re-run ALL FOUR gates) or decline
+    # (Decision Log entry with rationale). Re-review only what changed, if requested.
+    # expect: every finding closed; no open blocker/high items.
+
+M9 — GitHub publication:
 
     # resolve login via GitHub API (get_me); then create the public repo
     # emc2101-fan-speed-controller (no auto-init) via the GitHub MCP or:
@@ -691,7 +722,8 @@ readings that rise and fall with duty, and the persistence round trip restores a
 register after `load_config()`. Publication: the public GitHub repository
 `emc2101-fan-speed-controller` exists, renders its README, shows the LGPL-2.1 license,
 contains the full tree including `research/`, excludes `reference/`, and its remote HEAD
-matches local HEAD. If any item fails, the plan is not complete: record the failure in
+matches local HEAD. Code review: the independent M8 review's findings are all closed
+(fixed with gates green, or declined with a Decision Log rationale). If any item fails, the plan is not complete: record the failure in
 Progress and Surprises & Discoveries and continue from there.
 
 ## Idempotence and Recovery
@@ -712,7 +744,7 @@ Second, flash wear: config saves are explicit-only and rare by design; nothing i
 suite loops saves thousands of times. Power loss during a `save_config()` write is handled by
 the temp-file-plus-rename atomicity: the previous good file survives intact. No step in this
 plan deletes user data outside the repository, and the only irreversible external action is
-the M8 push, which is gated behind the full M7 acceptance.
+the M9 push, which is gated behind the full M7 acceptance and the closed M8 review.
 
 ## Artifacts and Notes
 
@@ -723,7 +755,9 @@ Populated as milestones complete; keep entries concise and evidence-focused.
   outcome, matrix outcome (section count), cold-boot scenario, date, firmware version.
 - Notable transcripts: pending — e.g. first `E2E HARDWARE MATRIX: PASS` per platform, any
   silicon-delta discovery with its fix commit.
-- GitHub URL (M8): pending — final public repository address.
+- Code review findings log (M8): pending — findings with severities and closure status
+  (fixed-commit or declined-decision reference per item).
+- GitHub URL (M9): pending — final public repository address.
 
 ## Interfaces and Dependencies
 
@@ -890,3 +924,10 @@ and compileall clean, and the real-file smoke test passed on Pico W flash
 (probe_persist.py: save → mutate 8 domains → load with strict read-back →
 verified restoration → probe file removed; ESP32-S3/RPi legs fold into M7
 per D29/D30). Implementation landed as d4d4595.
+
+Revision note (2026-11-22): milestone renumbering per user instruction — new M8 =
+independent code review gate inserted between M7 and publication; former M8 (GitHub
+publication) becomes M9. Updated everywhere: Plan-of-Work intro (ten milestones),
+Progress checklist, new `### M8` scope section, Concrete Steps block, Validation and
+Acceptance (review closure added as a completion criterion), Idempotence (M9 push),
+Artifacts (findings-log placeholder + GitHub URL relabeled). D33 records the decision.
