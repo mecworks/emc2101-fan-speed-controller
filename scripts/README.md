@@ -36,6 +36,7 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | `char_tach_diag.py` | M1 follow-up: chip-side TACH diagnostics — ALT_TCH latch check, TACH_M write acceptance (A3), CLK_SEL=1 trial (mutating; snapshots + restores 0x03/0x4A/0x4C) |
 | `char_tach_pwm_gate.py` | M1 follow-up (round 2): TACH-vs-PWM gating check — count at as-found setting vs 50 % drive, validates the RPM formula live (mutating; snapshots + restores 0x03/0x4C) |
 | `probe_pkg.py` | M2 acceptance: exercises the deployed `emc2101` package end-to-end (verify/probe/scan); read-only (requires `tools/deploy_mp.py` first) |
+| `probe_m3.py` | M3 live acceptance: exercises the full protocol API against real silicon — temperatures, status/alerts, duty/PWM, LUT round-trip, tach/RPM, calibration, scratchpad, standby; self-restoring (snapshots 27 registers, restores + verifies byte-for-byte) |
 
 ## esp32/
 

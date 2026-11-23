@@ -20,7 +20,7 @@ from pathlib import Path
 
 PKG_DIR = Path(__file__).resolve().parent.parent / "emc2101"
 FILES = [
-    "__init__.py", "_core.py", "_regs.py", "_tables.py",
+    "__init__.py", "_core.py", "_faults.py", "_regs.py", "_tables.py",
     "_transport_mp.py", "mp.py",
 ]
 CHUNK_CHARS = 4000  # base64 chars per exec call (~3 KB payload)

@@ -1,6 +1,13 @@
-"""API coverage gate: assert every public member exported by both facades
-(emc2101.mp.__all__ / emc2101.cp.__all__) is referenced somewhere in the
-unit-test suite under tests/. Run: python tools/api_coverage.py
+"""API coverage gate: assert every public member of the package is
+referenced somewhere in the unit-test suite under tests/.
+
+Covered surface (M3 onward):
+  - every name exported by both facades (emc2101.mp.__all__ /
+    emc2101.cp.__all__), and
+  - every public attribute of the device class (dir(EMC2101) minus
+    underscore-prefixed names), i.e. methods and properties.
+
+Run: python tools/api_coverage.py
 Exits non-zero listing any uncovered names."""
 import os
 import re
@@ -17,7 +24,8 @@ def main():
     if list(mp_mod.__all__) != list(cp_mod.__all__):
         print("facade __all__ lists differ (run the test suite first)")
         return 1
-    names = sorted(set(mp_mod.__all__))
+    names = set(mp_mod.__all__)
+    names.update(n for n in dir(mp_mod.EMC2101) if not n.startswith("_"))
 
     test_src = ""
     tests_dir = os.path.join(ROOT, "tests")
@@ -26,10 +34,13 @@ def main():
             with open(os.path.join(tests_dir, fn), encoding="utf-8") as f:
                 test_src += f.read() + "\n"
 
-    missing = [n for n in names
+    missing = [n for n in sorted(names)
                if not re.search(r"\b" + re.escape(n) + r"\b", test_src)]
     total = len(names)
-    print("public members: %d" % total)
+    print("public members: %d (%d facade exports + %d class members)"
+          % (total, len(set(mp_mod.__all__)),
+             len([n for n in dir(mp_mod.EMC2101)
+                  if not n.startswith("_")])))
     if missing:
         print("NOT EXERCISED IN TEST SUITE:")
         for m in missing:

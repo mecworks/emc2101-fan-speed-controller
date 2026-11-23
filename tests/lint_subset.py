@@ -9,8 +9,8 @@ Checks (per AGENTS.md ground rules):
   - no async/await or walrus operator
 (f-strings ARE allowed: MicroPython supports PEP 498 from v1.17; the
 project baseline is v1.29.0. @property is likewise allowed.)
-Shared files: _regs.py, _core.py, _tables.py, _transport_mp.py, mp.py,
-__init__.py. Exempt (CPython-only by design): _transport_cp.py, cp.py.
+Shared files: _regs.py, _core.py, _faults.py, _tables.py,
+_transport_mp.py, mp.py, __init__.py. Exempt (CPython-only by design): _transport_cp.py, cp.py.
 examples/ joins the file set when it lands (M6).
 """
 import ast
@@ -20,6 +20,7 @@ import sys
 SHARED = [
     "emc2101/_regs.py",
     "emc2101/_core.py",
+    "emc2101/_faults.py",
     "emc2101/_tables.py",
     "emc2101/_transport_mp.py",
     "emc2101/mp.py",

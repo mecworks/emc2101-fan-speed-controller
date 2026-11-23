@@ -119,6 +119,12 @@ EXPECTED_VALUES = {
     "BETA_ENABLE": 0x08,
     "BETA_FIELD_MASK": 0x07,
     "BETA_DISABLE_AUTODETECT": 0x07,
+    # M3 public enums
+    "ALERT_MODE_INTERRUPT": 0,
+    "ALERT_MODE_COMPARATOR": 1,
+    "FILTER_OFF": 0,
+    "FILTER_LEVEL_1": 1,
+    "FILTER_LEVEL_2": 2,
     # physical constants
     "RPM_DIVISOR": 5400000,
     "EXT_TEMP_STEP_C": 0.125,
@@ -156,6 +162,49 @@ COLLECTION_NAMES = (
     "SPINUP_TIMES_S", "BETA_MINIMUM_VALUES",
 )
 
+EXCEPTION_NAMES = (
+    "DiodeFaultError",
+)
+
+# --- Device-class public surface (M3) ---------------------------------------
+# Every public attribute of the device class, pinned so the coverage gate
+# keeps exercising the whole API as it grows.
+EXPECTED_CLASS_MEMBERS = frozenset((
+    # lifecycle & raw access
+    "close", "probe", "read_reg", "scan", "verify", "write_reg",
+    # identity
+    "mfg_id", "part_info", "product_id", "revision",
+    # temperatures & setpoints
+    "local_high_c", "local_temp_c", "remote_high_c", "remote_low_c",
+    "remote_temp_c", "tcrit_c", "tcrit_hysteresis_c",
+    # status & alerts
+    "active_alarms", "alert_mask", "alert_mode", "busy",
+    "clear_alert_mask", "diode_fault", "service_alert", "status_raw",
+    # manual mode & duty
+    "duty_cmd_raw", "manual", "set_duty_pct",
+    # PWM / DAC output configuration
+    "dac_enabled", "fan_output_inverted", "pwm_clk_sel", "pwm_div",
+    "pwm_freq_hz",
+    # LUT
+    "force_enabled", "forced_temp_c", "hysteresis_c", "lut",
+    "lut_get_index", "lut_set_index",
+    # tachometer & RPM
+    "min_rpm", "rpm", "tach_input_enabled", "tach_mode", "tach_threshold",
+    # spin-up
+    "spin_up_drive", "spin_up_enabled", "spin_up_fast_tach",
+    "spin_up_time_s",
+    # calibration
+    "beta_auto_detect", "beta_index", "ideality_factor",
+    "ideality_factor_index", "set_ideality_factor",
+    # scratchpad
+    "scratchpad_get", "scratchpad_set",
+    # power modes & conversion control
+    "averaging_filter", "conversion_rate", "dis_to_enabled",
+    "fault_queue_enabled", "fan_standby", "one_shot", "standby",
+    # presets
+    "configure_4wire_fan",
+))
+
 
 class PublicSurfaceTestCase(unittest.TestCase):
     def test_pinned_tables_track_the_exported_surface(self):
@@ -164,8 +213,24 @@ class PublicSurfaceTestCase(unittest.TestCase):
         pinning it here fails this test."""
         exported = set(mp_mod.__all__)
         pinned = (set(EXPECTED_VALUES) | set(FUNCTION_NAMES)
-                  | set(COLLECTION_NAMES) | {"EMC2101"})
+                  | set(COLLECTION_NAMES) | set(EXCEPTION_NAMES)
+                  | {"EMC2101"})
         self.assertEqual(exported, pinned)
+
+    def test_device_class_surface_is_pinned(self):
+        """Drift guard: the public attributes of the device class must
+        match EXPECTED_CLASS_MEMBERS exactly (both facades inherit the
+        same core). Adding/removing a member without updating the pin
+        fails this test."""
+        actual = frozenset(n for n in dir(mp_mod.EMC2101)
+                           if not n.startswith("_"))
+        self.assertEqual(actual, EXPECTED_CLASS_MEMBERS)
+
+    def test_exceptions_are_oserror_subclasses_on_both_facades(self):
+        for name in EXCEPTION_NAMES:
+            with self.subTest(name=name):
+                self.assertTrue(issubclass(getattr(mp_mod, name), OSError))
+                self.assertTrue(issubclass(getattr(cp_mod, name), OSError))
 
     def test_constants_match_datasheet_on_both_facades(self):
         for name, want in sorted(EXPECTED_VALUES.items()):

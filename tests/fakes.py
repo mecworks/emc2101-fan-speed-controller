@@ -6,7 +6,11 @@ Three stand-ins, one per layer of the transport contract:
 - FakeSMBus:    mimics smbus2.SMBus / smbus.SMBus (read_byte_data /
                 write_byte_data / close).
 - FakeTransport: implements the single-byte transport contract directly
-                (what _core consumes), with a transaction log.
+                (what _core consumes), with a transaction log. Pass
+                registers={addr: byte} to make it a stateful register
+                file (reads return stored values, writes update them);
+                without it, non-identity reads return 0x00 and writes are
+                fire-and-forget.
 
 All three support injecting OSError failures (first N attempts, or always)
 so the retry-ladder semantics can be asserted without hardware. These are
@@ -18,6 +22,21 @@ import errno
 from emc2101._regs import (ADDR_FIXED, MANUF_ID_SMSC, PRODUCT_ID_PLAIN,
                            REG_MANUF_ID, REG_PRODUCT_ID, REG_REVISION,
                            REVISION_EXPECTED)
+
+
+def write_entries(log, reg=None):
+    """Write transactions from a transport log as (reg, value) pairs.
+
+    Transport logs mix 2-tuple reads ("read", reg) with 3-tuple writes
+    ("write", reg, value); this extracts only the writes, optionally
+    filtered to one register."""
+    out = []
+    for e in log:
+        if e[0] != "write":
+            continue
+        if reg is None or e[1] == reg:
+            out.append((e[1], e[2]))
+    return out
 
 
 class FakeI2C:
@@ -99,13 +118,16 @@ class FakeTransport:
 
     def __init__(self, identity=(PRODUCT_ID_PLAIN, MANUF_ID_SMSC,
                                  REVISION_EXPECTED), bus_error=False,
-                 probe_result=True, scan_result=(0x0C, ADDR_FIXED)):
+                 probe_result=True, scan_result=(0x0C, ADDR_FIXED),
+                 registers=None):
         self.identity = identity
         self.bus_error = bus_error
         self.log = []
         self.closed = False
         self.probe_result = probe_result
         self.scan_result = list(scan_result)
+        self.stateful = registers is not None
+        self.registers = dict(registers or {})
 
     def read_byte(self, reg):
         self.log.append(("read", reg))
@@ -117,10 +139,14 @@ class FakeTransport:
             return self.identity[1]
         if reg == REG_REVISION:
             return self.identity[2]
+        if self.stateful and reg in self.registers:
+            return self.registers[reg] & 0xFF
         return 0x00
 
     def write_byte(self, reg, value):
         self.log.append(("write", reg, value))
+        if self.stateful:
+            self.registers[reg] = value & 0xFF
 
     def probe(self):
         return self.probe_result
