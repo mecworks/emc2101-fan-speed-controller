@@ -93,9 +93,37 @@ runtime: Product ID `FDh` must read `0x16` (plain EMC2101); Manufacturer `FEh` =
 datasheet-revision question (a newer Microchip revision might alter defaults — re-verify POR table
 if `FFh ≠ 0x01`).
 
-## 5. Source links
+## 5. Adafruit board guide (product 4808) — pull-up jumpers (page 7)
+
+Local copy: `../emc2101-fan-controller-and-temperature-sensor.pdf` (Adafruit
+guide for product 4808; added to `reference/` 2026-11-22, gitignored). Page 7
+documents two solder-jumper-controlled pull-ups on the breakout:
+
+| Jumper | Ships | Guide wording |
+|---|---|---|
+| FAN | **enabled** (cut to disable) | "Cut this jumper to disable the built-in pull-up on the Fan pin when using the DAC/DC voltage output" — matches the datasheet §5.6.1 DAC caveat |
+| TACH | **disabled** (solder to enable) | "Solder this jumper to enable the pull-up on the Tach pin when using the Tach pin for alerts" |
+
+Either jumper can be bridged with solder later to re-enable after cutting.
+
+Empirical confirmation (M1 follow-up, 2026-11-22 round 2): with the TACH
+jumper unbridged (as shipped) and a fan whose open-collector tach stage has
+no internal pull-up, the net floats high in TACH-input mode (ALT_TCH=1) and
+the chip reads the 0xFFFF sentinel at every duty; bridging 10 kOhm from the
+net to 3.3 V restored live counting (~678 RPM at 0 % drive). Fan-to-fan
+variation: some fans provide their own tach pull-up, others do not — the
+bench fan does not. Although the guide ties the jumper to alert use, the
+pull-up equally serves TACH-input mode (demonstrated via the external
+equivalent). Practical rule for the M5 wiring guide and README: if the TACH
+count sticks at the 0xFFFF sentinel with a verified-spinning fan, enable the
+onboard TACH pull-up (solder jumper) or add an external ~10 kOhm pull-up to
+3.3 V. The same pull-up also defines the ALERT open-drain idle-high in
+interrupt mode.
+
+## 6. Source links
 
 - Local datasheet (authoritative): `../EMC2101_datasheet.pdf` (SMSC EMC2101 Rev 2.54, 06-16-09)
+- Adafruit board guide (product 4808; local copy gitignored): `../emc2101-fan-controller-and-temperature-sensor.pdf` — page 7: pull-up jumpers (§5 above); online: <https://learn.adafruit.com/emc2101-fan-controller-and-temperature-sensor>
 - Microchip-hosted copy (referenced by Adafruit): `https://ww1.microchip.com/downloads/en/DeviceDoc/2101.pdf`
 - Adafruit product page: `https://www.adafruit.com/product/4808`
 - Adafruit lib: `https://github.com/adafruit/Adafruit_CircuitPython_EMC2101`

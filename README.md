@@ -33,6 +33,20 @@ The chip address is fixed at `0x4C` (no addressing pins). Primary hardware:
 Adafruit product 4808 breakout (STEMMA QT/Qwiic); any board carrying the
 same chip works.
 
+## Hardware notes
+
+- **TACH pull-up (important):** the EMC2101's tach input is open-collector
+  and needs something to pull the line high between pulses. On the Adafruit
+  4808 breakout the TACH/ALERT pull-up sits behind a solder jumper that
+  ships **disabled** (the guide recommends bridging it for alert use); some
+  fans provide their own internal tach pull-up, others do not. If the fan is
+  verified spinning but the RPM reading sticks at 0 (count `0xFFFF`), bridge
+  the TACH jumper on the back of the breakout or add an external ~10 kΩ
+  pull-up from the TACH net to 3.3 V. The same pull-up also defines the
+  ALERT pin's idle-high in interrupt mode.
+- **FAN-pin pull-up:** enabled by default on the breakout; cut the FAN
+  jumper only when using DAC (linear voltage) output mode.
+
 ## Repository layout
 
 | Path | Contents |
@@ -67,6 +81,7 @@ MicroPython hosts need nothing beyond the standard library.
 
 - SMSC EMC2101 datasheet Rev 2.54 (authoritative): <https://ww1.microchip.com/downloads/en/DeviceDoc/2101.pdf>
 - Adafruit product 4808 (primary hardware): <https://www.adafruit.com/product/4808>
+- Adafruit 4808 board guide (wiring, pull-up jumpers): <https://learn.adafruit.com/emc2101-fan-controller-and-temperature-sensor>
 - SMBus 2.0 specification: <http://smbus.org/>
 
 ## License

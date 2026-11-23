@@ -171,6 +171,18 @@ continuity beeps) — consistent with every prior symptom. Secondary
 consequence also cured: the ALERT open-drain output now has a defined
 idle-high on this bench.
 
+Mechanism confirmed against the Adafruit board guide (product 4808, page 7;
+local copy in `reference/`, gitignored): the breakout's TACH/ALERT pull-up
+is behind a solder jumper that ships DISABLED (the guide recommends bridging
+it "when using the Tach pin for alerts"), while the FAN-pin pull-up ships
+ENABLED (cut only for DAC mode). With the TACH jumper unbridged, whether the
+net idles high in TACH-input mode depends entirely on the fan's own tach
+stage — some fans provide an internal pull-up, others do not; the bench fan
+does not. Two equivalent fixes: bridge the TACH jumper on the back of the
+breakout, or add an external ~10 kOhm pull-up to 3.3 V (what was done here).
+Diagnostic rule: a verified-spinning fan with a TACH count stuck at the
+0xFFFF sentinel means check the pull-up first.
+
 PWM-gating check (`char_tach_pwm_gate.py`): reported caveat that some fans
 gate their tach output at 0 % PWM duty. Tested on this bench:
 

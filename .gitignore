@@ -25,6 +25,8 @@ htmlcov/
 # Vendor documentation (copyrighted — local reference copies only,
 # never redistribute; canonical URLs in README.md "References")
 reference/
+# Adafruit product 4808 board guide (pull-up jumper facts, page 7)
+reference/emc2101-fan-controller-and-temperature-sensor.pdf
 
 # OS cruft
 .DS_Store
