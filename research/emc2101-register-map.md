@@ -246,3 +246,21 @@ Datasheet Table 6.28 lists the LUT S-register default as `3Fh` (63), i.e. maximu
 consistent with §14 above ("S=max"). On the `17h` PWM_F grid values above 46 clamp to the
 top of the duty scale, so a cold-boot LUT would drive ~100 % if any threshold were reached;
 with all thresholds at 127 °C the LUT is effectively inert until programmed.
+
+### 16.5 Fan Setting read-out lags one conversion window after a PROG transition (undocumented)
+
+Right after a FAN_CFG write that flips the PROG bit, the `4Ch` read-out can keep reporting
+the **previously active drive source** for up to one temperature-conversion window (~64 ms
+at the fastest 16/s rate) before switching to the new mode's value. Observed live on the
+Pico W bench: an uninstrumented E2E phase-B run failed strict post-apply verification with
+`0x4c expected 0x29 got 0xc` — the stored manual-mode duty (raw 41) versus the stale
+LUT-driven mirror (raw 12 at ambient); the identical code passed when per-transaction
+logging added microsecond-scale overhead per I²C op, pushing the read-back past the settle
+window. Step-by-step probes with explicit sleeps never reproduced the lag (writes stick
+immediately; it is the READ-OUT that trails, not the write path).
+
+Consequence: any fan-domain read issued shortly after a PROG-bit transition must be
+preceded by a settling pause of at least one conversion window, and a strict read-back
+should retry disagreeing registers once after such a pause. Implemented in
+`_persist.collect_state` / `apply_state` (`SETTLE_MS = 100`, decision D36) and in the
+E2E/smoke snapshot-capture dances and safety nets.

@@ -130,6 +130,7 @@ else:
 _fc_pre = dev.read_reg(R.REG_FAN_CFG)
 if not (_fc_pre & R.FCFG_PROG):
     dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre | R.FCFG_PROG]))
+    time.sleep(0.1)   # D36: let the fan-control read-out settle
 snapshot = {}
 for addr in SNAP:
     snapshot[addr] = dev.read_reg(addr)
@@ -245,6 +246,7 @@ def sec_lut():
     _fc = dev.read_reg(R.REG_FAN_CFG)
     if not (_fc & R.FCFG_PROG):
         dev.write_reg(R.REG_FAN_CFG, bytes([_fc | R.FCFG_PROG]))
+        time.sleep(0.1)   # D36: let the fan-control read-out settle
     orig_lut_raw = []
     for i in range(8):
         orig_lut_raw.append(dev.read_reg(R.REG_LUT_BASE + 2 * i))
@@ -259,6 +261,7 @@ def sec_lut():
         fc = dev.read_reg(R.REG_FAN_CFG)
         if not (fc & R.FCFG_PROG):
             dev.write_reg(R.REG_FAN_CFG, bytes([fc | R.FCFG_PROG]))
+            time.sleep(0.1)   # D36: let the fan-control read-out settle
         for i in range(8):
             dev.write_reg(R.REG_LUT_BASE + 2 * i,
                           bytes([orig_lut_raw[2 * i]]))
@@ -598,6 +601,7 @@ finally:
         for a in bad:
             dev.write_reg(a, bytes([snapshot[a]]))
         dev.write_reg(R.REG_FAN_CFG, bytes([snapshot[R.REG_FAN_CFG]]))
+        time.sleep(0.1)   # D36: let the read-out settle before verifying
         bad2 = [a for a in sorted(snapshot)
                 if dev.read_reg(a) != snapshot[a]]
         expect(not bad2, "safety-net restore repaired %d drifted register(s)"

@@ -147,11 +147,26 @@ class MirrorTransport(object):
     active entry's setting, quantized onto the current PWM_F grid, at a
     fixed simulated temperature) instead of its stored content, and
     writes to the Fan Setting and LUT registers are silently dropped.
-    Everything else passes through untouched."""
+    Everything else passes through untouched.
+
+    Also models the read-out lag (D36): right after a LUT->manual
+    PROG-bit transition the Fan Setting read-out keeps reporting the
+    LUT-driven duty until one conversion window elapses; call
+    ``settled()`` (or let the patched _persist._settle_ms do it) to
+    advance past that window.
+    """
+
+    _instances = []
 
     def __init__(self, inner, sim_temp_c=27.0):
         self._inner = inner
         self._sim_temp = sim_temp_c
+        self._stale_value = None
+        MirrorTransport._instances.append(self)
+
+    def settled(self):
+        """Advance simulated time past one conversion window."""
+        self._stale_value = None
 
     def _drive(self):
         regs = self._inner.registers
@@ -174,6 +189,11 @@ class MirrorTransport(object):
 
     def read_byte(self, reg):
         if reg == REG_FAN_SETTING:
+            if self._inner.registers.get(REG_FAN_CFG, 0) & FCFG_PROG:
+                if self._stale_value is not None:
+                    self._inner.log.append(("read", reg))
+                    return self._stale_value
+                return self._inner.read_byte(reg)
             drive = self._drive()
             if drive is not None:
                 self._inner.log.append(("read", reg))
@@ -181,6 +201,14 @@ class MirrorTransport(object):
         return self._inner.read_byte(reg)
 
     def write_byte(self, reg, value):
+        if reg == REG_FAN_CFG:
+            old_prog = bool(
+                self._inner.registers.get(REG_FAN_CFG, 0) & FCFG_PROG)
+            if not old_prog and bool(value & FCFG_PROG):
+                # LUT -> manual: arm the stale read-out window (D36);
+                # the value latched is the drive still in effect NOW,
+                # i.e. before this write lands.
+                self._stale_value = self._drive()
         if (not (self._inner.registers.get(REG_FAN_CFG, 0) & FCFG_PROG)
                 and self._gated(reg)):
             self._inner.log.append(("write", reg, value))  # dropped
@@ -198,6 +226,17 @@ class MirrorTransport(object):
 
     def close(self):
         self._inner.close()
+
+
+# D36: substitute the real settling pause with instant simulated-time
+# advance so the suite never sleeps; every live MirrorTransport moves
+# past its stale read-out window when _persist settles.
+def _fake_settle(ms):
+    for m in MirrorTransport._instances:
+        m.settled()
+
+
+_persist._settle_ms = _fake_settle
 
 
 class TestEncodeDecode(unittest.TestCase):
@@ -611,6 +650,61 @@ class TestProgQuirkModel(unittest.TestCase):
         self.assertEqual(report["diff"], {})
         self.assertEqual(target.registers[REG_FAN_CFG], 0x00)
         self.assertEqual(target.registers[REG_FAN_SETTING], 0x2E)
+
+    # -- D36: read-out lag after a PROG transition -----------------------
+
+    def test_collect_settles_stale_readout(self):
+        # Chip sits in LUT mode; the stored FS (raw 46) differs from the
+        # LUT drive (raw 12). The dance's PROG-on transition arms the
+        # stale window; only a settling pause before the fan-domain reads
+        # yields the true stored content.
+        t = FakeTransport(registers=self._lut_mode_image())
+        mt = MirrorTransport(t, sim_temp_c=27.0)
+        settles = []
+        real = _persist._settle_ms
+
+        def fake_settle(ms):
+            settles.append(ms)
+            mt.settled()
+
+        _persist._settle_ms = fake_settle
+        try:
+            state = _persist.collect_state(mt.read_byte, mt.write_byte)
+        finally:
+            _persist._settle_ms = real
+        self.assertTrue(settles)                     # dance triggered it
+        self.assertEqual(state["fan"]["duty_pct"], 100.0)
+
+    def test_apply_strict_retry_absorbs_stale_readout(self):
+        # State ends MANUAL while the chip starts in LUT mode: the step-2
+        # PROG transition arms the stale window early in the apply, so
+        # the first strict pass can catch the stale mirror even though no
+        # read-back dance runs. The settle-and-retry must absorb it.
+        src = FakeTransport(registers=self._lut_mode_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        data = json.loads(_persist.encode(state))
+        data["fan"]["manual"] = True                 # end in manual mode
+        state = _persist.decode(_persist.encode(data))
+        target = FakeTransport(registers=dict(self._lut_mode_image()))
+        mt = MirrorTransport(target, sim_temp_c=27.0)
+        report = _persist.apply_state(mt.write_byte, mt.read_byte,
+                                      state, strict=True)
+        self.assertEqual(report["diff"], {})
+        self.assertEqual(target.registers[REG_FAN_CFG] & FCFG_PROG,
+                         FCFG_PROG)
+
+    def test_apply_strict_real_mismatch_survives_retry(self):
+        # A register the transport refuses to actually change must STILL
+        # fail strict verification after the retry - the settle path may
+        # mask read-out lag, never genuine corruption.
+        src = FakeTransport(registers=self._lut_mode_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        target = FakeTransport(registers=dict(self._lut_mode_image()))
+        mt = MirrorTransport(target, sim_temp_c=27.0)
+        sabotage = SabotagingTransport(target, REG_IDEALITY)
+        report = _persist.apply_state(sabotage.write_byte, mt.read_byte,
+                                      state, strict=True)
+        self.assertIn("%#02x" % REG_IDEALITY, report["diff"])
 
 
 if __name__ == "__main__":

@@ -55,6 +55,26 @@ SCHEMA_VERSION = 1
 #: TCRIT's power-on locked value in C (the one-time unlock rule pivots on it).
 TCRIT_LOCKED_C = 85
 
+#: Settling pause in ms for the fan-control read-out (decision D36, research
+#: note section 16): after a FAN_CFG PROG-bit transition the Fan Setting
+#: read-out keeps reporting the PREVIOUSLY ACTIVE drive source (the
+#: LUT-driven duty) for up to one conversion window (~64 ms at the fastest
+#: 16/s rate). One window plus margin makes the read-out deterministic.
+SETTLE_MS = 100
+
+
+def _settle_ms(ms):
+    """Pause for the silicon's fan-control read-out to settle (D36).
+
+    MicroPython exposes time.sleep_ms; CPython does not, so fall back to
+    fractional seconds. Kept as a module-level function so unit tests can
+    substitute a fake clock.
+    """
+    try:
+        time.sleep_ms(ms)
+    except AttributeError:
+        time.sleep(ms / 1000.0)
+
 _TOP_KEYS = ("schema_version", "saved_at_utc", "device", "config", "limits",
              "lut", "fan", "calibration", "misc")
 _DEVICE_KEYS = ("product_id", "mfg_id", "revision")
@@ -425,6 +445,11 @@ def collect_state(read_byte, write_byte):
     read back the EFFECTIVE LUT-DRIVEN duty instead of their stored
     contents, so they are captured under a temporary PROG=1 and the
     original Fan Configuration byte is restored afterwards.
+
+    Read-out lag (observed live 2026-11-22, decision D36): right after
+    the dance's PROG-on transition the Fan Setting read-out can still
+    report the LUT-driven duty for up to one conversion window, so a
+    settling pause follows the transition before the fan-domain reads.
     """
     rb = read_byte
     wb = write_byte
@@ -435,6 +460,7 @@ def collect_state(read_byte, write_byte):
     prog_was_off = not (fc & FCFG_PROG)
     if prog_was_off:
         wb(REG_FAN_CFG, fc | FCFG_PROG)
+        _settle_ms(SETTLE_MS)   # let the read-out switch over (D36)
     su = rb(REG_SPINUP)
     fs = rb(REG_FAN_SETTING) & 0x3F
     pwm_f = rb(REG_PWM_F) & 0x1F
@@ -708,6 +734,7 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
         prog_off = not (fc_final & FCFG_PROG)
         if prog_off:
             write_byte(REG_FAN_CFG, fc_final | FCFG_PROG)
+            _settle_ms(SETTLE_MS)   # let the read-out switch over (D36)
         for reg in sorted(expected):
             actual = read_byte(reg)
             want = expected[reg]
@@ -715,6 +742,22 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
                 want |= FCFG_PROG     # read under the temporary bit
             if actual != want:
                 diff["%#02x" % reg] = (expected[reg], actual)
+        if diff:
+            # A first pass can still catch the fan-control read-out
+            # mid-switch-over when the step-2 PROG transition armed the
+            # stale window earlier in the apply (D36): give it another
+            # settling window and re-check only the disagreeing regs.
+            _settle_ms(SETTLE_MS)
+            settled = {}
+            for reg_hex in sorted(diff):
+                reg = int(reg_hex, 16)
+                actual = read_byte(reg)
+                want = expected[reg]
+                if prog_off and reg == REG_FAN_CFG:
+                    want |= FCFG_PROG
+                if actual != want:
+                    settled[reg_hex] = (expected[reg], actual)
+            diff = settled
         if prog_off:
             write_byte(REG_FAN_CFG, fc_final)
     return {"applied": True, "warnings": warnings, "diff": diff}

@@ -77,6 +77,7 @@ dev = build_device()
 _fc_pre = dev.read_reg(R.REG_FAN_CFG)
 if not (_fc_pre & R.FCFG_PROG):
     dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre | R.FCFG_PROG]))
+    time.sleep(0.1)   # D36: let the fan-control read-out settle
 snapshot = {}
 for addr in SNAP:
     snapshot[addr] = dev.read_reg(addr)
@@ -91,6 +92,7 @@ def _restore_snapshot():
     on, then restore the final mode byte."""
     dev.write_reg(R.REG_FAN_CFG,
                   bytes([snapshot[R.REG_FAN_CFG] | R.FCFG_PROG]))
+    time.sleep(0.1)   # D36: let the fan-control read-out settle
     for addr in sorted(snapshot):
         if addr != R.REG_FAN_CFG:
             dev.write_reg(addr, bytes([snapshot[addr]]))
