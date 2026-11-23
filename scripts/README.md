@@ -34,3 +34,4 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | `health_check.py` | Responsiveness + state snapshot; clears scratchpads if dirty (pre/post mutating runs) |
 | `probe_tach_signal.py` | M1 follow-up: TACH-net signal probe — tap the net onto GP2, count edges/periods while the fan spins (read-only, no chip access) |
 | `char_tach_diag.py` | M1 follow-up: chip-side TACH diagnostics — ALT_TCH latch check, TACH_M write acceptance (A3), CLK_SEL=1 trial (mutating; snapshots + restores 0x03/0x4A/0x4C) |
+| `char_tach_pwm_gate.py` | M1 follow-up (round 2): TACH-vs-PWM gating check — count at as-found setting vs 50 % drive, validates the RPM formula live (mutating; snapshots + restores 0x03/0x4C) |

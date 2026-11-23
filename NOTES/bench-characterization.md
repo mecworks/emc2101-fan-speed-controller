@@ -151,6 +151,43 @@ Secondary consequence: the same missing pull-up leaves the ALERT output
 (open-drain, ALT_TCH=0) unable to define its idle-high state — interrupt
 use on this breakout will need the external pull-up as well.
 
+### TACH resolution 2026-11-22 (round 2) — root cause confirmed: missing receiver-side pull-up
+
+User bridged a 10 kOhm resistor from the TACH net to 3.3 V (now permanent on
+the bench). Re-ran `char_tach_diag.py` unchanged:
+
+| Check | Before pull-up | After pull-up |
+|---|---|---|
+| ALT_TCH latch | LATCHED | LATCHED |
+| TACH count @ FS=00 | 0xFFFF (sentinel) | 7959 → 7963 over 1 s (live, ~678 RPM) |
+| TACH_M write acceptance | All four latched | All four latched (count live throughout) |
+| CLK_SEL=1 trial | fcfg=0x2B, 0xFFFF | fcfg=0x2B, 7959 (live) |
+| Restore | PASS | PASS |
+
+Root cause: the open-collector tach output had no receiver-side pull-up; the
+net's HIGH state floated between pulses and defeated the chip's edge
+detector. The low-going closures were present all along (multimeter
+continuity beeps) — consistent with every prior symptom. Secondary
+consequence also cured: the ALERT open-drain output now has a defined
+idle-high on this bench.
+
+PWM-gating check (`char_tach_pwm_gate.py`): reported caveat that some fans
+gate their tach output at 0 % PWM duty. Tested on this bench:
+
+| Phase | Fan Setting | Drive | Count | Implied RPM |
+|---|---|---|---|---|
+| A (as found) | 0x00 | 0 % | 7955 (stable ×3) | ~678 |
+| B | 0x23 | 50 % (PWM_F=0x17) | 2887–2899 (stable ×3) | ~1862–1870 |
+
+The tach reads stably at 0 % drive — this fan does NOT gate its tach output
+at zero duty; the caveat does not apply here (kept as a general warning for
+other fans). Control loop responds monotonically (0 % → ~678 RPM,
+50 % → ~1865 RPM). Live validation of the RPM formula (eq. [3]):
+5,400,000/7955 ≈ 679 RPM matches the user-measured ~660 RPM floor within the
+±10 % tolerance. Closes ambiguity A7 early.
+
+Restore verification: PASS (cfg/fcfg/fsetting returned to snapshot).
+
 ### BUSY cadence (`char_tach.py`) — MEASURED
 
 1 ms polling over a 500 ms window (diode connected, default 16/s rate):
@@ -181,11 +218,11 @@ deferred-with-reason:
 |---|------|-------------|-------------------|
 | A1 | FILTER encoding duplication | Resolved by design; empirical shape check deferred to M7 | Encoder emits `00/01/11` for OFF/L1/L2 and decodes `10`→L1 (driver rule); live filter-response-shape verification folds into M7 E2E section 6 (`averaging_filter` round trip). |
 | A2 | Status bit 5 text (typo for -R) | Resolved by design | Bit treated as always-0 on the plain part and ignored in mask handling; bit 5 was clear in every live M1 status read (0x16, 0x00). |
-| A3 | Note 6.2 scope (CLK_OVR-divided clocks) | **Partially resolved — behavior still fan-blocked** | 2026-11-22 evening: TACH_M field confirmed WRITABLE at the 360 kHz base (all four encodings latch; Note 6.2 forcing absent at register level). Behavioral difference between modes below min RPM still unverifiable until a live signal reaches the pin (M7 or earlier). |
+| A3 | Note 6.2 scope (CLK_OVR-divided clocks) | **Partially resolved — behavioral distinction unreachable on this bench** | 2026-11-22 evening: TACH_M field confirmed WRITABLE at the 360 kHz base (all four encodings latch; Note 6.2 forcing absent at register level). Round 2 (post-pull-up): a live signal now reaches the pin, but distinguishing the modes requires running BELOW min detectable RPM (~82); the fan's mechanical floor (~678 RPM at 0 % drive) makes that unreachable without stalling the motor. Deferred to M7 (or dropped there if deemed unobservable). |
 | A4 | POLARITY default paragraph | Resolved by datasheet cross-check | Plain-part polarity is software-controlled, default 0; Table 6.18 POR default `20h` confirms it, and the post-desync `health_check.py` run read FAN_CFG at its POR value. |
 | A5 | TCRIT unlock lifecycle | **Deferred — deliberately not consumed** | Consuming the one-time unlock during characterization interacts ambiguously with restoration (per plan); it is exercised only in M7 where persistence needs it. Driver conservatively assumes TCRITOVRD stays set until power cycle. |
 | A6 | Receive Byte / pointer increment | **Resolved empirically** | No auto-increment; bare Receive/Send Byte forms desynchronize the SMBus interface (EIO, recovery on reconnect) — see Receive Byte section. Transport contract: register-addressed Write/Read Byte only. |
-| A7 | TACH counter clock (90 kHz vs implied 36 kHz) | Formula adopted; live check deferred with A3 | The published formula (validated against the Appendix B tables) is the driver's basis; live RPM-vs-formula verification needs a spinning fan — same blocker as A3. |
+| A7 | TACH counter clock (90 kHz vs implied 36 kHz) | **Resolved empirically** | 2026-11-22 round 2 (post-pull-up): live count 7955 at 0 % drive ⇒ 5,400,000/7955 ≈ 679 RPM vs the user-measured ~660 RPM floor (within ±10 %); 50 % drive ⇒ ~1865 RPM with monotonic response. Formula validated on live silicon. See the TACH-resolution section. |
 | A8 | Spin-up FAST_TACH interaction | Resolved by documentation | Precedence documented as bypass > fast-tach-abort > timed; no bench experiment required. |
 
 Physical checks deferred with reason (M1 scope items c and g):
@@ -207,18 +244,14 @@ Observed 2026-11-22 on the Pico W bench:
 - ~~External diode channel OPEN~~ **RESOLVED** (user re-seated the diode
   pins): raw 0x1C/0xC0 = 28.0 °C, status 0x00 (no FAULT), stable across
   200 reads.
-- **Fan/tach still dead — chip side exonerated 2026-11-22 (evening)**:
-  User multimeter data ruled out unpowered motor and disconnected wire
-  (continuity board TACH point ↔ chip ALERT pin; fan spinning at ~660 RPM
-  floor). Evening re-test (`char_tach_diag.py`, post-power-cycle) showed
-  ALT_TCH latches, TACH_M is writable at the 360 kHz base, and the counter
-  is alive but frozen at the 0xFFFF sentinel — the chip is not at fault.
-  Top suspect: the HIGH state of the TACH net (nothing visible pulls it
-  up; the continuity test only proves the low-going closures and biases
-  the line itself). Next: temporary 10 kohm pull-up bridge to 3.3 V +
-  re-run, or GP2 tap via `probe_tach_signal.py`. Per D26 these items
-  remain formally deferred to the M7 re-test (or earlier, once the loadout
-  is repaired) and do not block M1 closure.
+- ~~Fan/tach dead~~ **RESOLVED 2026-11-22 (round 2)**: root cause was the
+  missing receiver-side pull-up on the TACH net. User added a 10 kOhm
+  pull-up from the TACH net to 3.3 V (now permanent on the bench); the chip
+  immediately reads live speed (~678 RPM at 0 % drive, ~1865 RPM at 50 %).
+  See the TACH-resolution section above. Remaining deferred items per
+  D26/D27: A3 behavioral distinction (needs a sub-min-RPM stall,
+  unreachable on this bench), ALERT-pin idle-state measurement (folds into
+  M7 section 6), breakout photograph.
 
 ## Pending rotations (per D25)
 
