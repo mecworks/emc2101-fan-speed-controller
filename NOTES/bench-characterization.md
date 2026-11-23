@@ -171,10 +171,21 @@ Observed 2026-11-22 on the Pico W bench:
 - ~~External diode channel OPEN~~ **RESOLVED** (user re-seated the diode
   pins): raw 0x1C/0xC0 = 28.0 °C, status 0x00 (no FAULT), stable across
   200 reads.
-- **Fan/tach still dead**: TACH 0xFFFF at every manual duty level even with
-  the diode healthy. Suspects: tach wire not on the ALERT/TACH pin, or the
-  fan motor unpowered (FAN output is PWM only). Awaiting bench check;
-  blocks only the TACH-dependent sections above. Per D26 these items are
+- **Fan/tach still dead — re-isolated 2026-11-22 (evening, user bench data)**:
+  TACH 0xFFFF at every manual duty level even with the diode healthy. User
+  multimeter verification: continuity between the board's TACH point and the
+  chip's TACH input, and between the fan's PWM lead and the board's PWM pin;
+  the fan is powered and spinning at ~660 RPM (its floor speed at the 0
+  setting) — ruling out "unpowered motor" and "disconnected tach wire".
+  660 RPM is far above the ~82 RPM detection floor, so a live signal at the
+  pin would yield a count in the thousands, not 0xFFFF. Revised suspects:
+  (1) the fan's open-collector tach stage (a running motor does not imply a
+  live tach emitter — it is a separate circuit), (2) missing receiver-side
+  pull-up on the TACH net (Intel-spec OC tach needs one; the breakout
+  pull-up inventory is still outstanding — check visually), (3) the chip's
+  TACH input stage or ALT_TCH handling. Next: `probe_tach_signal.py`
+  GPIO-tap test + pull-up visual inspection; a temporary 10 kohm pull-up to
+  3.3 V is the cheap discriminating experiment. Per D26 these items remain
   formally deferred to the M7 re-test (or earlier, once the loadout is
   repaired) and do not block M1 closure.
 
