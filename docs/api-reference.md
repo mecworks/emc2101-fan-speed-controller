@@ -118,7 +118,7 @@ helper.
 
 | Member | Range / notes |
 |---|---|
-| `ideality_factor_index` (rw) | Table index, 17h, 6-bit (Table 6.13, 64 entries, 0.9949–1.0566). |
+| `ideality_factor_index` (rw) | Ideality setting, 17h, 6-bit (Table 6.13 defines settings 0x08–0x37, 48 codes, factors 0.9949–1.0566; other codes are undefined). |
 | `ideality_factor` | Current factor as a float (decoded through the table). |
 | `set_ideality_factor(factor)` | Nearest-match: writes the table index whose factor is closest. |
 | `beta_auto_detect` (rw) | Beta-compensation autodetect (18h ENABLE bit; default on). |

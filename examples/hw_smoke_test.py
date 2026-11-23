@@ -71,10 +71,30 @@ for i in range(8):
     SNAP.append(R.REG_LUT_BASE + 2 * i + 1)
 
 dev = build_device()
+# Silicon quirk (D35): while PROG=0 the Fan Setting and LUT registers
+# read back the LUT-driven duty instead of their stored contents, so
+# capture them under a temporary PROG=1 and restore the mode after.
+_fc_pre = dev.read_reg(R.REG_FAN_CFG)
+if not (_fc_pre & R.FCFG_PROG):
+    dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre | R.FCFG_PROG]))
 snapshot = {}
 for addr in SNAP:
     snapshot[addr] = dev.read_reg(addr)
+if not (_fc_pre & R.FCFG_PROG):
+    dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre]))
 print("snapshot: %d registers captured" % len(snapshot))
+
+
+def _restore_snapshot():
+    """Raw byte-for-byte restore. Fan-domain registers are read-only
+    while PROG=0, so write everything except FAN_CFG with PROG forced
+    on, then restore the final mode byte."""
+    dev.write_reg(R.REG_FAN_CFG,
+                  bytes([snapshot[R.REG_FAN_CFG] | R.FCFG_PROG]))
+    for addr in sorted(snapshot):
+        if addr != R.REG_FAN_CFG:
+            dev.write_reg(addr, bytes([snapshot[addr]]))
+    dev.write_reg(R.REG_FAN_CFG, bytes([snapshot[R.REG_FAN_CFG]]))
 
 restored_by_load = False
 try:
@@ -141,8 +161,7 @@ try:
 finally:
     # ------------------------------------------------ safety-net restore
     if not restored_by_load:
-        for addr in sorted(snapshot):
-            dev.write_reg(addr, bytes([snapshot[addr]]))
+        _restore_snapshot()
         bad = [a for a in sorted(snapshot)
                if dev.read_reg(a) != snapshot[a]]
         expect(not bad, "safety-net restore byte-for-byte (%d regs)"
@@ -155,8 +174,7 @@ finally:
         # with the raw snapshot (the saved profile legitimately carries
         # mid-test state such as PROG/ALT_TCH, so a full-snapshot
         # equality check here would be wrong by design).
-        for addr in sorted(snapshot):
-            dev.write_reg(addr, bytes([snapshot[addr]]))
+        _restore_snapshot()
         bad = [a for a in sorted(snapshot)
                if dev.read_reg(a) != snapshot[a]]
         expect(not bad, "safety-net restore byte-for-byte (%d regs)"

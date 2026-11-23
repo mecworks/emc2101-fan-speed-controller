@@ -1176,7 +1176,7 @@ class EMC2101:
         if p is None:
             raise ValueError("no config path: pass path or construct "
                              "with config_file=")
-        state = collect_state(self._t.read_byte)
+        state = collect_state(self._t.read_byte, self._t.write_byte)
         _atomic_write(p, encode(state))
         return p
 

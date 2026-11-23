@@ -140,10 +140,71 @@ class SabotagingTransport(object):
         pass
 
 
+class MirrorTransport(object):
+    """Wraps a stateful FakeTransport and models the live-observed
+    PROG quirk (D35, research note): while PROG=0 (LUT mode) the Fan
+    Setting register reads back the EFFECTIVE LUT-DRIVEN duty (the
+    active entry's setting, quantized onto the current PWM_F grid, at a
+    fixed simulated temperature) instead of its stored content, and
+    writes to the Fan Setting and LUT registers are silently dropped.
+    Everything else passes through untouched."""
+
+    def __init__(self, inner, sim_temp_c=27.0):
+        self._inner = inner
+        self._sim_temp = sim_temp_c
+
+    def _drive(self):
+        regs = self._inner.registers
+        if regs.get(REG_FAN_CFG, 0) & FCFG_PROG:
+            return None
+        pwm_f = regs.get(REG_PWM_F, 1) or 1
+        idx = 0
+        for i in range(8):
+            t_raw = regs.get(REG_LUT_BASE + 2 * i, 0x7F)
+            t = t_raw if t_raw < 0x80 else t_raw - 0x100
+            if self._sim_temp >= t:
+                idx = i
+        s = regs.get(REG_LUT_BASE + 2 * idx + 1, 0) & 0x3F
+        return duty_pct_to_setting(setting_to_duty_pct(s, pwm_f), pwm_f)
+
+    @staticmethod
+    def _gated(reg):
+        return (reg == REG_FAN_SETTING
+                or REG_LUT_BASE <= reg <= REG_LUT_BASE + 15)
+
+    def read_byte(self, reg):
+        if reg == REG_FAN_SETTING:
+            drive = self._drive()
+            if drive is not None:
+                self._inner.log.append(("read", reg))
+                return drive
+        return self._inner.read_byte(reg)
+
+    def write_byte(self, reg, value):
+        if (not (self._inner.registers.get(REG_FAN_CFG, 0) & FCFG_PROG)
+                and self._gated(reg)):
+            self._inner.log.append(("write", reg, value))  # dropped
+            return
+        self._inner.write_byte(reg, value)
+
+    def probe(self):
+        return self._inner.probe_result
+
+    def scan(self):
+        return self._inner.scan()
+
+    def delay_ms(self, ms):
+        pass
+
+    def close(self):
+        self._inner.close()
+
+
 class TestEncodeDecode(unittest.TestCase):
     def setUp(self):
-        self.state = _persist.collect_state(
-            FakeTransport(registers=base_image()).read_byte)
+        img_t = FakeTransport(registers=base_image())
+        self.state = _persist.collect_state(img_t.read_byte,
+                                            img_t.write_byte)
 
     def _mutate(self, fn):
         data = json.loads(_persist.encode(self.state))
@@ -261,8 +322,8 @@ class TestEncodeDecode(unittest.TestCase):
 
 class TestCollectState(unittest.TestCase):
     def test_collect_base_image(self):
-        s = _persist.collect_state(
-            FakeTransport(registers=base_image()).read_byte)
+        t = FakeTransport(registers=base_image())
+        s = _persist.collect_state(t.read_byte, t.write_byte)
         self.assertRegex(s["saved_at_utc"],
                          r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         self.assertEqual(s["device"]["mfg_id"], "0x5d")
@@ -274,8 +335,8 @@ class TestCollectState(unittest.TestCase):
         self.assertEqual(s["misc"]["conversion_rate_per_s"], 16.0)
 
     def test_collect_modified_image(self):
-        s = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        t = FakeTransport(registers=modified_image())
+        s = _persist.collect_state(t.read_byte, t.write_byte)
         self.assertEqual(s["limits"]["local_high_c"], 60)
         self.assertEqual(s["limits"]["remote_high_c"], 65.5)
         self.assertEqual(s["limits"]["remote_low_c"], -10.25)
@@ -315,8 +376,8 @@ class TestCollectState(unittest.TestCase):
 class TestApplyState(unittest.TestCase):
     def test_apply_restores_modified_image(self):
         target = FakeTransport(registers=base_image())
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
         report = _persist.apply_state(target.write_byte,
                                       target.read_byte, state)
         self.assertTrue(report["applied"])
@@ -332,8 +393,9 @@ class TestApplyState(unittest.TestCase):
         img = base_image()
         img[REG_TCRIT] = int_temp_to_raw(90)      # unlock already used
         target = FakeTransport(registers=img)
-        state = _persist.collect_state(
-            FakeTransport(registers=base_image()).read_byte)   # tcrit 85
+        src = FakeTransport(registers=base_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        # tcrit 85
         report = _persist.apply_state(target.write_byte,
                                       target.read_byte, state)
         self.assertEqual(len(report["warnings"]), 1)
@@ -343,15 +405,17 @@ class TestApplyState(unittest.TestCase):
 
     def test_tcrit_unlock_attempted_from_locked(self):
         target = FakeTransport(registers=base_image())
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)  # 90
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        # 90
         _persist.apply_state(target.write_byte, target.read_byte, state)
         self.assertEqual(target.registers[REG_TCRIT], int_temp_to_raw(90))
         self.assertTrue(target.registers[REG_CONFIG] & CFG_TCRITOVRD)
 
     def test_tcrit_noop_when_equal(self):
         target = FakeTransport(registers=base_image())
-        state = _persist.collect_state(target.read_byte)
+        state = _persist.collect_state(target.read_byte,
+                                       target.write_byte)
         _persist.apply_state(target.write_byte, target.read_byte, state)
         self.assertFalse(any(e[0] == "write" and e[1] == REG_TCRIT
                              for e in target.log))
@@ -360,7 +424,8 @@ class TestApplyState(unittest.TestCase):
         img = modified_image()
         img[REG_FAN_CFG] = FCFG_POLARITY | FCFG_CLK_OVR  # LUT mode start
         source = FakeTransport(registers=img)
-        state = _persist.collect_state(source.read_byte)
+        state = _persist.collect_state(source.read_byte,
+                                       source.write_byte)
         state["fan"]["manual"] = False            # stored PROG = 0
         target = FakeTransport(registers=dict(img))
         _persist.apply_state(target.write_byte, target.read_byte, state)
@@ -371,8 +436,8 @@ class TestApplyState(unittest.TestCase):
 
     def test_lut_ascending_rechecked_before_any_write(self):
         target = FakeTransport(registers=base_image())
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
         state["lut"]["entries"][3]["temp_c"] = 10
         with self.assertRaisesRegex(ValueError, "descend"):
             _persist.apply_state(target.write_byte, target.read_byte,
@@ -382,8 +447,8 @@ class TestApplyState(unittest.TestCase):
     def test_strict_diff_reported_and_raised_by_glue(self):
         inner = FakeTransport(registers=base_image())
         sabo = SabotagingTransport(inner, REG_IDEALITY)
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
         # apply_state itself never raises on a diff - it reports.
         report = _persist.apply_state(sabo.write_byte, sabo.read_byte,
                                       state, strict=True)
@@ -445,8 +510,8 @@ class TestCorePersistenceGlue(unittest.TestCase):
         self.assertFalse(any(e[0] == "write" for e in t.log))
 
     def test_product_id_mismatch_refused_before_writes(self):
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
         state["device"]["product_id"] = "0x28"
         with open(self.path, "w") as f:
             f.write(_persist.encode(state))
@@ -456,8 +521,8 @@ class TestCorePersistenceGlue(unittest.TestCase):
         self.assertFalse(any(e[0] == "write" for e in t.log))
 
     def test_revision_mismatch_warns_but_applies(self):
-        state = _persist.collect_state(
-            FakeTransport(registers=modified_image()).read_byte)
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
         state["device"]["revision"] = "0x02"
         with open(self.path, "w") as f:
             f.write(_persist.encode(state))
@@ -500,6 +565,52 @@ class TestCorePersistenceGlue(unittest.TestCase):
             dev.load_config(strict=True)
         report = dev.load_config(strict=False)
         self.assertEqual(report["diff"], {})      # read-back skipped
+
+
+class TestProgQuirkModel(unittest.TestCase):
+    """Regression tests for the live-observed PROG quirk (D35): while
+    PROG=0 the Fan Setting register mirrors the LUT-driven duty and
+    fan-domain writes are dropped. Collection and strict verification
+    must both capture/compare TRUE stored contents."""
+
+    def _lut_mode_image(self):
+        img = base_image()
+        img[REG_FAN_CFG] = 0x00                  # LUT mode, no other bits
+        img[REG_FAN_SETTING] = 0x2E              # stored 100 % (raw 46)
+        img[REG_LUT_BASE + 1] = 0x0C             # entry 0 drive: raw 12
+        return img
+
+    def test_collect_in_lut_mode_captures_stored_contents(self):
+        t = FakeTransport(registers=self._lut_mode_image())
+        mt = MirrorTransport(t, sim_temp_c=27.0)
+        state = _persist.collect_state(mt.read_byte, mt.write_byte)
+        # Stored FS is 46 (100 %) even though the mirror would report
+        # the active entry's drive (raw 12 ~= 26 %).
+        self.assertEqual(state["fan"]["duty_pct"], 100.0)
+        self.assertFalse(state["fan"]["manual"])
+        seq = write_entries(t.log, REG_FAN_CFG)
+        self.assertEqual(len(seq), 2)
+        self.assertEqual(seq[0][1] & FCFG_PROG, FCFG_PROG)  # dance opens
+        self.assertEqual(seq[1][1], 0x00)                   # mode restored
+
+    def test_collect_skips_dance_when_manual(self):
+        t = FakeTransport(registers=base_image())   # PROG=1 at POR
+        _persist.collect_state(t.read_byte, t.write_byte)
+        self.assertEqual(write_entries(t.log, REG_FAN_CFG), [])
+
+    def test_apply_strict_clean_ending_in_lut_mode(self):
+        src_img = self._lut_mode_image()
+        src = FakeTransport(registers=dict(src_img))
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        target = FakeTransport(registers=dict(base_image()))
+        mt = MirrorTransport(target, sim_temp_c=27.0)
+        report = _persist.apply_state(mt.write_byte, mt.read_byte,
+                                      state, strict=True)
+        # Without the read-back dance this diff would show 0x4c:
+        # expected 0x2e got 0x0c (the mirror value).
+        self.assertEqual(report["diff"], {})
+        self.assertEqual(target.registers[REG_FAN_CFG], 0x00)
+        self.assertEqual(target.registers[REG_FAN_SETTING], 0x2E)
 
 
 if __name__ == "__main__":

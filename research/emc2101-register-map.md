@@ -205,3 +205,44 @@ Host polls general-call `0x06` when ALERT asserted; device answers with its clie
 configured as interrupt AND pin asserted; answering sets MASK iff no status bits pending. A driver
 for this project does **not** need to implement ARA (it is a host-initiated protocol); polling
 `status_raw()` suffices. Documented so the omission is deliberate.
+
+
+## 16. Live silicon observations (bench, 2026-11-22)
+
+Empirical findings from the Pico W bench (COM16, plain EMC2101 rev 0x01) that go beyond or
+clarify the datasheet wording. Probe scripts: `probe_fansetting_mirror.py` (sandbox),
+E2E phase-B failure forensics.
+
+### 16.1 Fan Setting mirrors the LUT drive while PROG=0 (undocumented)
+
+While PROG=0 (LUT active), reading `4Ch` returns the **effective duty currently driven by
+the LUT** (active entry's setting quantized onto the current PWM_F grid), not the stored
+register content. Verified live: with a programmed curve and forced temperatures, `4Ch`
+tracked the expected per-index duty exactly (ambient → raw `00h`, forced 75 °C → raw
+`1Ch` = 60 %, forced 82 °C → raw `29h` = 90 % on the `17h` grid). The datasheet only says
+the register is read-only in this mode; it does not say what it reads back.
+
+Consequence: any snapshot/collect of `4Ch` (and any strict post-write verification of it)
+must happen under a temporary PROG=1, restoring the original Fan Configuration byte
+afterwards. Implemented in `_persist.collect_state` and `apply_state` strict read-back
+(decision D35), and in the E2E/smoke safety nets.
+
+### 16.2 Fan-domain writes are dropped while PROG=0
+
+Writes to `4Ch` and the LUT table (`50h`–`5Fh`) issued while PROG=0 are silently ignored
+(register keeps its previous value). Evidence: raw byte-for-byte restores performed in LUT
+mode drifted on exactly those addresses (plus volatile TACH counters/status bits, which are
+expected). All driver write paths already do the PROG dance; raw diagnostic/safety-net code
+must too.
+
+### 16.3 LUT setting bytes hold true content in both modes
+
+Unlike `4Ch`, the LUT S bytes (`51h`, `53h`, …, `5Fh`) read back their stored values even
+while PROG=0 (only writes are gated). The mirror applies to the Fan Setting register alone.
+
+### 16.4 POR LUT setting default is `3Fh` (Table 6.28)
+
+Datasheet Table 6.28 lists the LUT S-register default as `3Fh` (63), i.e. maximum drive —
+consistent with §14 above ("S=max"). On the `17h` PWM_F grid values above 46 clamp to the
+top of the duty scale, so a cold-boot LUT would drive ~100 % if any threshold were reached;
+with all thresholds at 127 °C the LUT is effectively inert until programmed.

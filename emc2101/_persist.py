@@ -412,19 +412,29 @@ def _scratchpad(value):
 
 # --- State collection ----------------------------------------------------------
 
-def collect_state(read_byte):
+def collect_state(read_byte, write_byte):
     """Snapshot every persisted register into a schema-v1 state dict.
 
-    Takes a single-byte reader (the transport's ``read_byte``). Status,
+    Takes the transport's single-byte reader and writer. Status,
     temperatures and TACH counts are transient and are NOT collected.
     Duties are dequantized through the CURRENT PWM_F grid; a degenerate
     PWM_F of 0 is treated as 1 for that purpose.
+
+    Silicon quirk (observed live 2026-11-22, research note D35): while
+    PROG=0 (LUT mode) the Fan Setting register and the LUT setting bytes
+    read back the EFFECTIVE LUT-DRIVEN duty instead of their stored
+    contents, so they are captured under a temporary PROG=1 and the
+    original Fan Configuration byte is restored afterwards.
     """
     rb = read_byte
+    wb = write_byte
     cfg = rb(REG_CONFIG)
     filt = rb(REG_FILTER)
     am = rb(REG_ALERT_MASK)
     fc = rb(REG_FAN_CFG)
+    prog_was_off = not (fc & FCFG_PROG)
+    if prog_was_off:
+        wb(REG_FAN_CFG, fc | FCFG_PROG)
     su = rb(REG_SPINUP)
     fs = rb(REG_FAN_SETTING) & 0x3F
     pwm_f = rb(REG_PWM_F) & 0x1F
@@ -448,6 +458,8 @@ def collect_state(read_byte):
         t_signed = t if t < 0x80 else t - 0x100
         entries.append({"temp_c": t_signed,
                         "duty_pct": setting_to_duty_pct(s, deq_grid)})
+    if prog_was_off:
+        wb(REG_FAN_CFG, fc)
 
     return {
         "schema_version": SCHEMA_VERSION,
@@ -543,7 +555,11 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
     5. Write the fan configuration LAST, ending with the stored PROG
        value (ordering rule Q4).
     6. When strict (default, decision D15), read back every written
-       register and report per-address diffs.
+       register and report per-address diffs. If the final Fan
+       Configuration ends with PROG=0, the read-back happens under a
+       temporary PROG=1 (same silicon quirk as collection: those
+       registers mirror the LUT drive while PROG=0) and the final byte
+       is restored afterwards.
 
     Returns a report dict: ``{"applied": True, "warnings": [...],
     "diff": {addr_hex: (expected, actual)}}``. Callers surface the
@@ -689,8 +705,16 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
     # 6. Strict post-apply read-back (decision D15).
     diff = {}
     if strict:
+        prog_off = not (fc_final & FCFG_PROG)
+        if prog_off:
+            write_byte(REG_FAN_CFG, fc_final | FCFG_PROG)
         for reg in sorted(expected):
             actual = read_byte(reg)
-            if actual != expected[reg]:
+            want = expected[reg]
+            if prog_off and reg == REG_FAN_CFG:
+                want |= FCFG_PROG     # read under the temporary bit
+            if actual != want:
                 diff["%#02x" % reg] = (expected[reg], actual)
+        if prog_off:
+            write_byte(REG_FAN_CFG, fc_final)
     return {"applied": True, "warnings": warnings, "diff": diff}

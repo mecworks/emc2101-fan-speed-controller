@@ -32,6 +32,9 @@ import sys
 import time
 
 from emc2101 import _regs as R
+from emc2101._core import (ALERT_MODE_COMPARATOR, ALERT_MODE_INTERRUPT,
+                          FILTER_LEVEL_2)
+from emc2101._tables import IDEALITY_FACTORS, ideality_factor
 
 FLAG_FILE = "/emc2101_e2e_coldboot.flag"
 PROFILE_FILE = "/emc2101_e2e_profile.json"
@@ -121,9 +124,17 @@ if phase_b:
 else:
     dev = build_device()
 
+# Silicon quirk (D35): while PROG=0 the Fan Setting and LUT registers
+# read back the LUT-driven duty instead of their stored contents, so
+# capture them under a temporary PROG=1 and restore the mode after.
+_fc_pre = dev.read_reg(R.REG_FAN_CFG)
+if not (_fc_pre & R.FCFG_PROG):
+    dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre | R.FCFG_PROG]))
 snapshot = {}
 for addr in SNAP:
     snapshot[addr] = dev.read_reg(addr)
+if not (_fc_pre & R.FCFG_PROG):
+    dev.write_reg(R.REG_FAN_CFG, bytes([_fc_pre]))
 print("snapshot: %d registers captured" % len(snapshot))
 
 CURVE = [(30, 25), (40, 40), (50, 55), (60, 70),
@@ -150,9 +161,10 @@ def sec_identity():
            "part_info tuple matches")
     found = dev.scan()
     expect(R.ADDR_FIXED in found, "scan() finds %#x" % R.ADDR_FIXED)
-    ara = (R.ARA_GENERAL_CALL << 1) & 0x78
-    print("    [info] scan footprint: %r (ARA general-call address %#x%s)"
-          % (found, ara, " present" if ara in found else " absent"))
+    ara_present = R.ARA_GENERAL_CALL in found
+    print("    [info] scan footprint: %r (ARA general-call device address "
+          "%#x%s)" % (found, R.ARA_GENERAL_CALL,
+                     " present" if ara_present else " absent"))
 
 
 # ------------------------------------------------------------------ S2
@@ -227,18 +239,33 @@ def sec_manual_duty_pwm():
 # ------------------------------------------------------------------ S4
 def sec_lut():
     dev.tach_input_enabled = True
-    dev.manual = False
+    # Capture the original LUT under a temporary PROG=1: while PROG=0
+    # the setting bytes read back the LUT-driven duty (D35), not the
+    # stored contents.
+    _fc = dev.read_reg(R.REG_FAN_CFG)
+    if not (_fc & R.FCFG_PROG):
+        dev.write_reg(R.REG_FAN_CFG, bytes([_fc | R.FCFG_PROG]))
     orig_lut_raw = []
     for i in range(8):
         orig_lut_raw.append(dev.read_reg(R.REG_LUT_BASE + 2 * i))
         orig_lut_raw.append(dev.read_reg(R.REG_LUT_BASE + 2 * i + 1))
+    if not (_fc & R.FCFG_PROG):
+        dev.write_reg(R.REG_FAN_CFG, bytes([_fc]))
+    dev.manual = False
 
     def restore_lut_raw():
+        # LUT registers are read-only while PROG=0 (D35); do the raw
+        # restore under a temporary PROG=1 and keep the final mode.
+        fc = dev.read_reg(R.REG_FAN_CFG)
+        if not (fc & R.FCFG_PROG):
+            dev.write_reg(R.REG_FAN_CFG, bytes([fc | R.FCFG_PROG]))
         for i in range(8):
             dev.write_reg(R.REG_LUT_BASE + 2 * i,
                           bytes([orig_lut_raw[2 * i]]))
             dev.write_reg(R.REG_LUT_BASE + 2 * i + 1,
                           bytes([orig_lut_raw[2 * i + 1]]))
+        if not (fc & R.FCFG_PROG):
+            dev.write_reg(R.REG_FAN_CFG, bytes([fc]))
 
     dev.lut = CURVE
     got = dev.lut
@@ -302,8 +329,8 @@ def sec_tach_rpm():
 # ------------------------------------------------------------------ S6
 def sec_faults_alerts():
     st = dev.status_raw()
-    expect(isinstance(st, int) and 0 <= st <= 127,
-           "status_raw() returns 7-bit status (%d)" % st)
+    expect(isinstance(st, int) and 0 <= st <= 255,
+           "status_raw() returns a raw byte (%d)" % st)
     alarms = dev.active_alarms()
     expect(isinstance(alarms, list), "active_alarms() returns a list: %r"
            % (alarms,))
@@ -315,11 +342,11 @@ def sec_faults_alerts():
     expect((raw_after & R.AMSK_RESERVED) == (raw_before & R.AMSK_RESERVED),
            "alert mask reserved bits preserved by RMW")
     dev.alert_mask = raw_before & R.AMSK_DEFINED
-    dev.alert_mode = R.ALERT_MODE_COMPARATOR
-    expect(dev.alert_mode == R.ALERT_MODE_COMPARATOR,
+    dev.alert_mode = ALERT_MODE_COMPARATOR
+    expect(dev.alert_mode == ALERT_MODE_COMPARATOR,
            "alert mode comparator")
-    dev.alert_mode = R.ALERT_MODE_INTERRUPT
-    expect(dev.alert_mode == R.ALERT_MODE_INTERRUPT,
+    dev.alert_mode = ALERT_MODE_INTERRUPT
+    expect(dev.alert_mode == ALERT_MODE_INTERRUPT,
            "alert mode interrupt")
     svc = dev.service_alert()
     expect(isinstance(svc, int), "service_alert() serviced (returned %d)"
@@ -334,8 +361,8 @@ def sec_faults_alerts():
     expect(dev.conversion_rate == 2.0, "conversion rate round trip (2/s)")
     dev.conversion_rate = orig_cr
     orig_fl = dev.averaging_filter
-    dev.averaging_filter = R.FILTER_LEVEL_2
-    expect(dev.averaging_filter == R.FILTER_LEVEL_2,
+    dev.averaging_filter = FILTER_LEVEL_2
+    expect(dev.averaging_filter == FILTER_LEVEL_2,
            "averaging filter round trip (level 2)")
     dev.averaging_filter = orig_fl
     dev.dis_to_enabled = True
@@ -355,10 +382,10 @@ def sec_calibration():
     expect(dev.ideality_factor_index == 20,
            "ideality index round trip (20)")
     factor = dev.ideality_factor
-    expect(abs(factor - R.IDEALITY_FACTORS[20]) < 0.0005,
+    expect(abs(factor - ideality_factor(20)) < 0.0005,
            "ideality factor decodes through table (%.4f)" % factor)
     nearest = dev.set_ideality_factor(1.0)
-    expect(nearest in R.IDEALITY_FACTORS,
+    expect(nearest in IDEALITY_FACTORS,
            "set_ideality_factor(1.0) nearest match (%.4f)" % nearest)
     orig_auto = dev.beta_auto_detect
     orig_beta = dev.beta_index
@@ -564,8 +591,13 @@ finally:
     bad = [a for a in sorted(snapshot)
            if dev.read_reg(a) != snapshot[a]]
     if bad:
+        # Fan-domain registers are read-only while PROG=0 (D35): repair
+        # under a temporary PROG=1, then restore the final mode byte.
+        dev.write_reg(R.REG_FAN_CFG,
+                      bytes([snapshot[R.REG_FAN_CFG] | R.FCFG_PROG]))
         for a in bad:
             dev.write_reg(a, bytes([snapshot[a]]))
+        dev.write_reg(R.REG_FAN_CFG, bytes([snapshot[R.REG_FAN_CFG]]))
         bad2 = [a for a in sorted(snapshot)
                 if dev.read_reg(a) != snapshot[a]]
         expect(not bad2, "safety-net restore repaired %d drifted register(s)"
