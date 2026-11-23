@@ -33,3 +33,4 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | `char_tach.py` | M1 TACH/TACH_M/manual-duty/BUSY probes (mutating; snapshots + restores 0x03/0x4A/0x4C) |
 | `health_check.py` | Responsiveness + state snapshot; clears scratchpads if dirty (pre/post mutating runs) |
 | `probe_tach_signal.py` | M1 follow-up: TACH-net signal probe — tap the net onto GP2, count edges/periods while the fan spins (read-only, no chip access) |
+| `char_tach_diag.py` | M1 follow-up: chip-side TACH diagnostics — ALT_TCH latch check, TACH_M write acceptance (A3), CLK_SEL=1 trial (mutating; snapshots + restores 0x03/0x4A/0x4C) |
