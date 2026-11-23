@@ -123,8 +123,13 @@ class EMC2101(_Core):
         with the bus number and frequency).
 
         addr must be the fixed SMBus address 0x4C (ValueError otherwise).
-        config_file overrides the default JSON config path (M4).
+        config_file overrides the default JSON config path AND enables
+        auto-load at construction: if the file exists it is applied after
+        binding (first-boot semantics - a missing file is a silent no-op,
+        an invalid file raises before any register write); when omitted
+        the constructor performs zero file I/O (M4, decisions D4/D14).
         """
         super().__init__(TransportMP(i2c, addr), addr,
                          config_file if config_file is not None
-                         else _DEFAULT_CONFIG_PATH)
+                         else _DEFAULT_CONFIG_PATH,
+                         auto_load=config_file is not None)

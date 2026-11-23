@@ -203,6 +203,8 @@ EXPECTED_CLASS_MEMBERS = frozenset((
     "fault_queue_enabled", "fan_standby", "one_shot", "standby",
     # presets
     "configure_4wire_fan",
+    # persistence (M4)
+    "load_config", "save_config",
 ))
 
 

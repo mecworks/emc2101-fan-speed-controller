@@ -3,8 +3,9 @@
 M3 scope: the full protocol-level API - identity, temperatures and
 setpoints, status/alerts, manual duty, PWM output configuration, LUT,
 tachometer/RPM, spin-up, calibration, scratchpad, power modes, presets,
-and the raw-tier register accessors. M4 adds JSON persistence on top of
-this surface; M5 adds live E2E validation.
+and the raw-tier register accessors. M4's JSON persistence
+(save_config/load_config, backed by emc2101._persist) simulates the -R
+variant's EEPROM auto-load; M5 adds live E2E validation.
 
 The transport is a duck-typed object implementing the single-byte contract:
     read_byte(reg) -> int
@@ -29,6 +30,7 @@ Protocol facts relied upon here (datasheet Rev 2.54; M1 live-confirmed):
 """
 
 from ._faults import DiodeFaultError
+from ._persist import apply_state, collect_state, decode, encode
 from ._regs import (ADDR_FIXED, AMSK_DEFINED, AMSK_HIGH, AMSK_INT, AMSK_LOW,
                     AMSK_TACH, AMSK_TCRIT, BETA_DISABLE_AUTODETECT,
                     BETA_ENABLE, BETA_FIELD_MASK, BASE_CLOCK_1P4K_HZ,
@@ -89,6 +91,52 @@ _ALARM_BITS = (
 )
 
 
+# --- File I/O glue for save_config/load_config ---------------------------------
+
+def _read_text(path):
+    """Read a whole text file; OSError propagates (missing file etc.)."""
+    f = open(path, "r")
+    try:
+        return f.read()
+    finally:
+        f.close()
+
+
+def _atomic_write(path, text):
+    """Write text to path atomically where the port allows it.
+
+    Writes a sibling temp file first, then renames it over the target
+    (os.replace when available, else os.rename), so a crash mid-write
+    leaves either the old or the new file, never a torn one. Ports
+    without rename semantics still get the temp-file cleanup on error;
+    atomicity there degrades to last-write-wins (documented limitation).
+    """
+    import os
+    tmp = path + ".tmp"
+    f = open(tmp, "w")
+    try:
+        f.write(text)
+        f.close()
+    except BaseException:
+        f.close()
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    replace = getattr(os, "replace", None)
+    if replace is None:
+        replace = os.rename
+    try:
+        replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _pwm_freq_hz(clk_sel, pwm_f, pwm_d, clk_ovr):
     """Achievable PWM frequency from the four governing fields.
 
@@ -141,13 +189,18 @@ def _solve_pwm(target_hz):
 class EMC2101:
     """EMC2101 driver core bound to a transport object."""
 
-    def __init__(self, transport, addr=ADDR_FIXED, config_file=None):
+    def __init__(self, transport, addr=ADDR_FIXED, config_file=None,
+                 auto_load=False):
         """Bind a transport and record the configuration file path.
 
         addr must be the fixed SMBus address 0x4C (ValueError otherwise).
         config_file is the resolved JSON config path owned by the facade
-        (save/load semantics land in M4; the attribute exists now so the
-        public surface is stable from M2).
+        (the facades seed their platform default when it is omitted);
+        save_config()/load_config() use it as their zero-arg target.
+        auto_load (set by the facades only when the caller explicitly
+        passed config_file=) applies that file during construction with
+        first-boot semantics: a missing file is a silent no-op, an
+        invalid file raises BEFORE any register write (decision D14).
         """
         if addr != ADDR_FIXED:
             raise ValueError("EMC2101 SMBus address is fixed at %#x"
@@ -155,6 +208,13 @@ class EMC2101:
         self._t = transport
         self.addr = addr
         self.config_path = config_file
+        if auto_load and self.config_path is not None:
+            try:
+                text = _read_text(self.config_path)
+            except OSError:
+                pass          # first boot: no config yet (D14)
+            else:
+                self.load_config(self.config_path)
 
     # ------------------------------------------------------------------
     # Lifecycle & raw access
@@ -1098,3 +1158,66 @@ class EMC2101:
         sane = SU_FAST_TACH | SU_DRIVE_100 | 0x07
         if su != sane:
             self._t.write_byte(REG_SPINUP, sane)
+
+    # ------------------------------------------------------------------
+    # Persistence ("virtual EEPROM", decisions D4/D13-D16)
+    # ------------------------------------------------------------------
+
+    def save_config(self, path=None):
+        """Snapshot the current chip configuration to a JSON file.
+
+        Reads every persisted register, decodes it into schema-v1 state
+        (semantic values, stamped with the observed identity trio), and
+        writes it atomically to ``path`` (or ``self.config_path`` when
+        omitted). Returns the effective path. Raises ValueError when no
+        path is resolvable and OSError on file I/O failure."""
+        p = self.config_path if path is None else path
+        if p is None:
+            raise ValueError("no config path: pass path or construct "
+                             "with config_file=")
+        state = collect_state(self._t.read_byte)
+        _atomic_write(p, encode(state))
+        return p
+
+    def load_config(self, path=None, strict=True):
+        """Apply a saved JSON configuration to the chip.
+
+        Reads ``path`` (or ``self.config_path`` when omitted), validates
+        it, refuses a product-ID mismatch, warns on a revision mismatch,
+        and applies the state in the documented order (see
+        emc2101._persist.apply_state). With strict (default True,
+        decision D15) every written register is read back and a
+        non-empty diff raises ValueError; the report dict
+        ``{"applied", "warnings", "diff"}`` is returned either way.
+
+        UNLIKE the constructor's opt-in auto-load, an explicit load of a
+        MISSING FILE RAISES OSError - silence is reserved for first boot.
+        A corrupt/invalid file raises ValueError before any register
+        write occurs."""
+        p = self.config_path if path is None else path
+        if p is None:
+            raise ValueError("no config path: pass path or construct "
+                             "with config_file=")
+        text = _read_text(p)
+        state = decode(text)
+        warnings = []
+        pid_stored = int(state["device"]["product_id"][2:], 16)
+        rev_stored = int(state["device"]["revision"][2:], 16)
+        pid_live = self._t.read_byte(REG_PRODUCT_ID)
+        if pid_stored != pid_live:
+            raise ValueError(
+                "product ID mismatch: config %#x vs device %#x (wrong "
+                "profile for this part?)" % (pid_stored, pid_live))
+        rev_live = self._t.read_byte(REG_REVISION)
+        if rev_stored != rev_live:
+            warnings.append("revision mismatch: config %#x vs device %#x"
+                            % (rev_stored, rev_live))
+        report = apply_state(self._t.write_byte, self._t.read_byte, state,
+                             strict=strict)
+        report["warnings"].extend(warnings)
+        if strict and report["diff"]:
+            raise ValueError("post-apply verification failed: %s"
+                             % ", ".join("%s expected %#02x got %#02x"
+                                         % (k, v[0], v[1])
+                                         for k, v in sorted(report["diff"].items())))
+        return report

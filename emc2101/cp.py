@@ -128,8 +128,13 @@ class EMC2101(_Core):
         fixed SMBus address 0x4C (ValueError otherwise). Pass an existing
         smbus2.SMBus object as handle to adopt it instead of opening one
         (then close() will not release it). config_file overrides the
-        default JSON config path (M4).
+        default JSON config path AND enables auto-load at construction:
+        if the file exists it is applied after binding (first-boot
+        semantics - a missing file is a silent no-op, an invalid file
+        raises before any register write); when omitted the constructor
+        performs zero file I/O (M4, decisions D4/D14).
         """
         super().__init__(TransportCP(bus, addr, handle), addr,
                          config_file if config_file is not None
-                         else _DEFAULT_CONFIG_PATH)
+                         else _DEFAULT_CONFIG_PATH,
+                         auto_load=config_file is not None)
