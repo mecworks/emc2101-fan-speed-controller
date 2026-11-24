@@ -59,8 +59,10 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [x] (2026-11-23) M7 in progress — RPi 3A+ leg: board seated on the Pi (user confirmed). User wiring correction: the breakout's VIN is fed from GPIO header **pin 1 (3 V3)** — pins 2 and 4 are the 5 V rail and must not power the 3.0–3.6 V supply; ground is pin 6. `docs/wiring.md` gained an explicit Pi-header power-rail note. Read-only connectivity probe through the CPython facade (scp'd `probe_connectivity.py` to `~/emc2101-test/`): probe True at 0x4C, identity trio (0x16, 0x5D, 0x01) exact match, scan [0x4c], local 23.0 °C, remote 28.000 °C (diode channel live), CONFIG 0x00 / FAN_CFG 0x20 / CONV_RATE 0x08 — a clean fresh-POR state, consistent with the chip losing power during the rewire. Awaiting user OK before running `hw_smoke_test.py` + E2E phases A/B.
 - [x] (2026-11-23) M7 in progress — RPi 3A+ leg: audited the MAX31760 sibling project's RPi/smbus comms quirks against this tree (user prompt). Findings: (a) legacy-smbus block-read prepend quirk — structurally avoided (EMC2101 speaks single-byte SMBus only; the CP transport uses only `read_byte_data`/`write_byte_data`, no block reads anywhere in the tree); (b) EEPROM-commit address-NACK stalls (tW window, 6 ms–>600 ms observed on the sibling bench) — not applicable (no on-chip EEPROM; software persistence lives on the host filesystem, off the bus), and the chip's own ~25 ms SMBus-TIMEOUT recovery (M1 finding) sits well inside `RETRY_DELAYS_MS` (≈1 s span); (c) SW_POR mid-transaction reset (errno 121/EREMOTEIO on bcm2835, sibling D33) — not applicable (EMC2101 has no software-POR register; documented gap in `docs/operational-notes.md`), and its general principle (never retry a write that can trigger a device reset) holds by construction since no such write exists in the API; (d) the "fixed zero-traffic wait beats ack-polling" lesson — already embodied in D36's `SETTLE_MS` fixed settle. Positive de-risk: the sibling project validated the IDENTICAL stack (same Pi `fanspeedcontroller`, bus 1, header pins 3/5, smbus2, Python 3.13.5) with smoke PASS + E2E 12/12. One operational gap closed: added `scripts/rpi/bus_recovery.py` (Philips-spec wedged-bus escape hatch: 9×SCL pulses + STOP via sysfs GPIO as root with the i2c driver unloaded; adapted from the sibling's `rpi_bus_recovery.py` per the D24 adoption precedent, pins parameterized) plus its `scripts/README.md` row. No driver changes required.
 - [x] (2026-11-23) M7 RPi 3A+ leg complete — M7 GATED. RPi 3A+ bench (hostname fanspeedcontroller, SMBus bus 1, CPython 3.13.5 + smbus2, non-root user in the i2c group): after the wiring correction (VIN ← header pin 1 = 3 V3; pins 2/4 are the 5 V rail — `docs/wiring.md`) and syncing the tree to `~/emc2101-test/`, two example-script fixes were needed before the runs could pass: (a) persistence paths hardcoded to the flash root `/` raised PermissionError on the non-root Pi — made platform-aware via a BASE_DIR pattern (`/` on MicroPython, `os.path.expanduser("~")` on Linux) in both `hw_smoke_test.py` and `e2e_hardware_test.py` (de55e9f); (b) the linux cold-boot approximation branch contained an unsatisfiable assertion (`scratchpad == scratchpad ^ 0xFF`) — rewritten to stage a distinctive profile (local high 65 °C, scratchpad 0xAB), clobber with distinct values, and assert a fresh instance restores the profiled values (0c395aa). Results: `hw_smoke_test.py` PASS (18/18 checks — identity trio exact, local 23.0 °C / remote 28.000 °C, duty sweep raw 0/12/23/34/46 monotonic, settled 2123 RPM above the 500 floor, strict persistence round trip clean, 40-register safety-net restore byte-for-byte); `e2e_hardware_test.py` PASS twice consecutively (all eleven sections — PWM solver requested 25000 Hz achieved 25714.3 Hz, bulk LUT 8-pair round trip quantized to grid, cold-boot approximation verified with the fresh-instance constructor auto-load restoring lh=65 °C / sp=0xAB, all four presets applied + verified, error-model ValueError/FileNotFoundError paths raised, safety net repaired 14 drifted registers). Post-run probe: chip healthy at fresh-POR state (CONFIG 0x00, FAN_CFG 0x20, CONV_RATE 0x08). Host gates green on the final tree (267 tests, api_coverage 203/203, lint clean, compileall clean). M7 acceptance met on all three platforms; results table recorded in Artifacts. Next: M8 independent code review (separate external agent arranged by the user).
-- [ ] M8 Independent code review: independent agent reviews the full tree after M7; every finding addressed (fixed + gated, or declined + logged) before M9 proceeds.
-- [ ] M9 GitHub publication: create public repo, push full history, verify.
+- [x] M8 Independent code review: independent agent reviews the full tree after M7; every finding addressed (fixed + gated, or declined + logged) before M10 proceeds.
+- [x] (2026-11-23) M8 review report received and validated — the separate external agent's `CODE_REVIEW_0.1.0.md` arrived and was committed as `76db648`; verdict: driver core SOUND (protocol logic, interlock ordering, PROG dance, TCRIT unlock handling, fixed-point math, and persistence all match the datasheet ground truth and `research/emc2101-register-map.md` §16; zero register-map discrepancies; clean-room compliant; Effective-Python pass strong), with defects concentrated in the documentation/planning layer. All twenty findings (1 HIGH, 2 MEDIUM, 6 LOW, 11 NOTE) were re-validated against the source tree, with one correction to the report (F-01: `_faults.py` EXISTS and holds `DiodeFaultError` — the phantom classes are `ConfigFormatError`/`ConfigValidationError`/`ConfigApplyError`, which live only in six doc sites). Remediation is tracked as the new milestone M9 (checklist in its scope section); publication renumbered to M10. Presented to the user for review; M9 execution awaits approval.
+- [ ] M9 Address M8 code-review findings: work the validated checklist top-down by severity; every finding fixed with all four gates green or declined with a Decision Log rationale.
+- [ ] M10 GitHub publication: create public repo, push full history, verify.
 
 ## Surprises & Discoveries
 
@@ -258,6 +260,9 @@ Date/Author: 2026-11-22, agent.
 - Decision: D37 — attribute the ESP32-S3 bench external-channel room-temperature offset (~+5–6 °C above local die / wall thermometer) to a bench-wiring/calibration artifact (uncompensated series resistance in the breadboard path beyond REC's 100 Ω correction ceiling, and/or β/ideality mismatch for this PNP), NOT to a driver defect: no code changes, no new API surface, no tolerance added to any check. The E2E/smoke plausibility bounds (`TEMP_RANGE_MIN_C..MAX_C`, ±1 °C datasheet accuracy claimed only over the 60–100 °C diode range) are left as-is; the offset is documented in `research/emc2101-register-map.md` §16.6 so future benches don't re-investigate it.
 Rationale: the touch test (2026-11-23, COM7) proved the channel fully live and thermally coupled — finger on the PNP body drove the reading 29 → 38–39 °C within 15 s and release relaxed it back to 29 °C within ~80 s — which rules out frozen/conversion-stuck datapath hypotheses; the constant offset across ambient AND heated states points at a fixed gain/resistance error at the input node. A software "correction" was rejected: the driver must report what the chip measures, and the offset magnitude depends on wiring that varies per bench. Datapath sanity independently verified against datasheet §5.3/§6.9 (Normal mode converts continuously at CONV_RATE; one-shot refresh only effective in Standby/Mixed) with live BUSY-bit sightings (5/8–8/8 across rapid STATUS reads). User disposition: chalk up and move on.
 Date/Author: 2026-11-23, user + agent.
+- Decision: D38 — insert a new milestone M9 (address M8 code-review findings) between the M8 review and publication; the former M9 (GitHub publication) is renumbered to M10. The M8 report's twenty validated findings are worked top-down by severity inside M9 per the review's prioritized action list; every finding is fixed with all four quality gates green or explicitly declined with rationale in this log before M10 may proceed.
+Rationale: the M8 review (separate external agent; report `CODE_REVIEW_0.1.0.md`, committed `76db648`) found the driver core sound but the documentation/planning layer describing an error model and persistence report shape the code does not implement (F-01 HIGH: the typed config-error hierarchy promised in six doc sites was planned in M4 and never implemented). Publication must not happen until those are reconciled; a dedicated milestone gives the remediation its own checklist, acceptance, and gate instead of folding it into the review milestone or the push.
+Date/Author: 2026-11-23, agent.
 
 ## Outcomes & Retrospective
 
@@ -348,13 +353,14 @@ with the same chip are supported by virtue of the fixed address and identical re
 
 ## Plan of Work
 
-The work proceeds through ten milestones, M0 through M9, in strict order. Each milestone is
-independently verifiable: it ends with a concrete artifact and an observable acceptance check
-detailed under Concrete Steps. Milestones M0–M6 are host-side (Windows dev machine) except
-M1, which needs the bench; M7 needs all three boards; M8 is a review gate with no external
-dependencies; M9 needs network access to GitHub. The
-sequence mirrors the research-phase phase plan P0–P6 (`research/01-feasibility-effort.md` §7),
-with M0 added for repository foundation, M8 for the independent code review, and M9 for
+The work proceeds through eleven milestones, M0 through M10, in strict order. Each milestone
+is independently verifiable: it ends with a concrete artifact and an observable acceptance
+check detailed under Concrete Steps. Milestones M0–M6 are host-side (Windows dev machine)
+except M1, which needs the bench; M7 needs all three boards; M8 is a review gate with no
+external dependencies; M9 addresses the review's findings (host-side, plus one optional bench
+check); M10 needs network access to GitHub. The sequence mirrors the research-phase phase plan
+P0–P6 (`research/01-feasibility-effort.md` §7), with M0 added for repository foundation, M8
+for the independent code review, M9 for remediating the review's findings, and M10 for
 publication.
 
 ### M0 — Repository foundation
@@ -573,7 +579,7 @@ against the datasheet facts in `research/`, the decisions in this plan, and gene
 correctness/security/maintainability standards. Findings are recorded in this plan (a
 dedicated subsection under Surprises & Discoveries if numerous) with severity
 (blocker/high/medium/low/nit), location, and description. Every finding must be addressed
-before M9 proceeds: fixed in a commit that keeps all four quality gates green, or explicitly
+before M10 proceeds: fixed in a commit that keeps all four quality gates green, or explicitly
 declined with a rationale recorded in the Decision Log. Review scope includes at least:
 protocol correctness (interlocks, retry ladder, destructive-read discipline), persistence
 validation completeness, API-surface consistency with the docs, MicroPython subset
@@ -581,7 +587,69 @@ compliance, test-quality gaps, and documentation accuracy. Acceptance: findings 
 complete; every item closed (fixed + gated, or declined + logged); no open blocker or
 high-severity items.
 
-### M9 — GitHub publication
+### M9 — Address M8 code-review findings
+
+Scope: work through the validated findings from the M8 review (`CODE_REVIEW_0.1.0.md`,
+committed as `76db648`) top-down by severity, following the review's own prioritized action
+list (§11). Each finding is either fixed in a commit that keeps all four quality gates green,
+or explicitly declined with a rationale recorded in the Decision Log. Checklist (every item
+re-validated against the source tree 2026-11-23):
+
+Blocking (HIGH/MEDIUM):
+1. F-01 (HIGH) — reconcile the persistence error model: implement the documented typed
+   hierarchy `ConfigFormatError`/`ConfigValidationError` (ValueError subclasses) and
+   `ConfigApplyError` (OSError subclass) in `emc2101/_faults.py`, raise them at the
+   documented sites (decode/validation failures, apply failures), export them through both
+   facades' `__all__`, extend the `test_public_surface.py` pin and `tools/api_coverage.py`,
+   and convert the ten `assertRaises(ValueError)` / one `assertRaises(OSError)` assertions in
+   `tests/test_persist.py` to the typed classes. (Alternative — rewriting the six doc sites to
+   describe plain ValueError/OSError — is rejected: the docs already promise typed errors, and
+callers distinguishing "bad file" from "bus failed mid-apply" is a genuine need.)
+2. F-02 (MEDIUM) — rewrite `docs/persistence.md`: `save_config()` returns the effective path
+   string (not a report); `load_config()`/`apply_state()` return `{"applied", "warnings",
+   "diff"}` — no `written`/`skipped` keys; TCRIT skips land in `warnings`.
+3. F-03 (MEDIUM) — fix the `docs/persistence.md` schema-v1 POR example: `"manual"` must be
+   `true` (FAN_CFG POR 0x20 ⇒ PROG=1 ⇒ manual mode at power-on).
+
+LOW (fix recommended):
+4. F-04 — reword the `tcrit_c` rows in `docs/api-reference.md` and
+   `docs/operational-notes.md`: the setter is silent best-effort (a property setter's return
+   value is discarded by assignment semantics); verify by reading back.
+5. F-05 — update the stale unit-suite count in `CHANGELOG.md` (261 → 267).
+6. F-06 — align `CONTRIBUTING.md`'s host-Python bound to `>=3.10` to match `pyproject.toml`.
+7. F-07 — delete the dead `dev.set_duty_pct(0)` statements at the tails of S3/S5 in
+   `examples/e2e_hardware_test.py` (Fan Setting writes while PROG=0 are silently dropped,
+   research §16.2) or replace them with a comment citing §16.2.
+8. F-09 — fix the demos' ending state: restore the calm state BEFORE `save_config()` (so the
+   saved profile does not capture the 100 % sweep step) and reword the "POR-equivalent" print
+   to "fan at floor speed".
+
+Cheap code polish:
+9. F-08 — combine the two byte writes in `lut_set_index` into a single
+   `_with_prog_writable` callback (removes the double FAN_CFG toggle in LUT mode).
+10. F-15 — introduce `SU_SPIN_TIME_POR = 0x07` in `_regs.py` and use it in the
+    `spin_up_enabled` setter and `configure_4wire_fan`.
+11. F-18 — add a test pinning the equidistant tie-break in `set_ideality_factor` (lower table
+    index wins).
+
+NOTE (triage — accept as-is or fold into the same commits):
+12. F-10 — tighten the ARA `0x0C` scan-footprint wording in `docs/operational-notes.md`
+    (presence is state-dependent: interrupt mode + ALERT asserted; absence is not a fault).
+13. F-11 — add the datasheet citation for the diode orientation to the research trail, or
+    soften `docs/wiring.md`'s wording accordingly.
+14. F-12 — exercise CP `scan()` once against an alarmed chip at the next bench session; if any
+    anomaly appears, restrict the CP scan range or document the caveat.
+15. F-13, F-14, F-17, F-19, F-20 — accepted as-is (broad OSError swallow in the constructor
+    auto-load; exhaustive PWM-solver cost; triple-demo maintenance burden; raw-tier wrap
+    semantics; `dis_to_enabled` naming).
+16. F-16 — confirm the CI workflow ran green post-publication; drop Python 3.15 from the
+    matrix if `setup-python` cannot resolve it.
+
+Acceptance: every finding closed (fixed + gated, or declined + logged); all four quality gates
+green on the final tree; the Artifacts findings-log bullet populated with per-item closure
+references.
+
+### M10 — GitHub publication
 
 Scope: publish the validated repository. Resolve the account login via the GitHub API
 (`get_me`). Create the public repository `emc2101-fan-speed-controller` (no auto-init; the
@@ -726,7 +794,15 @@ M8 — Independent code review:
     # (Decision Log entry with rationale). Re-review only what changed, if requested.
     # expect: every finding closed; no open blocker/high items.
 
-M9 — GitHub publication:
+M9 — Address M8 code-review findings:
+
+    # work the M9 checklist (scope section) top-down by severity; per item:
+    #   fix -> commit, then re-run ALL FOUR gates
+    #   decline -> Decision Log entry with rationale
+    # expect: every finding closed; gates green on the final tree; findings-log
+    # bullet in Artifacts populated with per-item closure references.
+
+M10 — GitHub publication:
 
     # resolve login via GitHub API (get_me); then create the public repo
     # emc2101-fan-speed-controller (no auto-init) via the GitHub MCP or:
@@ -777,7 +853,8 @@ Second, flash wear: config saves are explicit-only and rare by design; nothing i
 suite loops saves thousands of times. Power loss during a `save_config()` write is handled by
 the temp-file-plus-rename atomicity: the previous good file survives intact. No step in this
 plan deletes user data outside the repository, and the only irreversible external action is
-the M9 push, which is gated behind the full M7 acceptance and the closed M8 review.
+the M10 push, which is gated behind the full M7 acceptance, the closed M8 review, and the
+closed M9 remediation.
 
 ## Artifacts and Notes
 
@@ -794,9 +871,8 @@ Populated as milestones complete; keep entries concise and evidence-focused.
 
   Notes: duty quantization identical across all three benches (raw 12/23/34/46 on the POR 0x17 PWM_F grid); the ESP32-S3 and RPi 3A+ benches additionally exercise live tach (~2100–2350 RPM) and a connected diode channel (~28 °C remote). RPi specifics: PWM solver requested 25000 Hz achieved 25714.3 Hz; local die 23.0 °C; chip found at fresh POR after the rewire (CONFIG 0x00, FAN_CFG 0x20).
 - Notable transcripts: first `E2E HARDWARE MATRIX: PASS` per platform — Pico W 2026-11-22 (three A→B cycles after the D35/D36 fixes), ESP32-S3 2026-11-23 (two A→B cycles, zero code changes), RPi 3A+ 2026-11-23 (two runs; example-script-only fixes de55e9f/0c395aa). Silicon deltas discovered during M7: the PROG=0 Fan Setting mirror/write-drop behavior (D35; research §16) and the one-conversion-window read-out lag after a PROG transition (D36; research §16.5) — both absorbed in `_persist.py` with `MirrorTransport` regression coverage.
-- Code review findings log (M8): pending — findings with severities and closure status
-  (fixed-commit or declined-decision reference per item).
-- GitHub URL (M9): pending — final public repository address.
+- Code review findings log (M8): report `CODE_REVIEW_0.1.0.md` received from the separate external agent and committed as `76db648` (2026-11-23): 20 findings (1 HIGH, 2 MEDIUM, 6 LOW, 11 NOTE), every one re-validated against the source tree; verdict — driver core sound, defects concentrated in the documentation/planning layer. Per-item closure status (fixed-commit or declined-decision reference) is tracked in the M9 checklist and filled in here as M9 executes.
+- GitHub URL (M10): pending — final public repository address.
 
 ## Interfaces and Dependencies
 
@@ -1062,3 +1138,15 @@ Revision note (2026-11-23, evening): RPi 3A+ leg opened — user seated the boar
 Revision note (2026-11-23, evening 2): audited the MAX31760 sibling project's RPi I²C comms quirks (legacy-smbus block-read prepend, EEPROM-commit NACK stalls, SW_POR errno-121, poll-vs-fixed-wait) against the EMC2101 tree — every item is structurally avoided or already absorbed (single-byte protocol, no on-chip EEPROM, no software-POR register, D36 fixed settle); no driver changes. Added `scripts/rpi/bus_recovery.py` (wedged-bus escape hatch, D24 adoption precedent) and its `scripts/README.md` row. Tree remains gated; pending user OK for the Pi smoke + E2E runs.
 
 Revision note (2026-11-23, session close): M7 gated — all three legs complete. RPi 3A+ leg closed out: wiring correction (VIN = header pin 1, 3 V3), two example-script fixes (platform-aware persistence paths de55e9f; unsatisfiable cold-boot assertion rewritten 0c395aa), `hw_smoke_test.py` PASS (18/18) and `e2e_hardware_test.py` PASS ×2 (11/11 sections each, including the fresh-instance cold-boot approximation). All five in-progress M7 Progress entries checked off, the M7 milestone checkbox flipped, the RPi row recorded in the Artifacts results table, and the Notable-transcripts bullet populated. Session commits: 8ebcf6b (wiring correction + connectivity), 21ba448 (bus_recovery.py + sibling comms-quirk audit), de55e9f (BASE_DIR), 0c395aa (cold-boot assertion). Tree fully gated (267 tests, api_coverage 203/203, lint clean, compileall clean). Next milestone: M8 independent code review by the separate external agent arranged by the user; this agent acts on that report (every finding fixed + gated, or declined + logged) before M9 proceeds.
+
+Revision note (2026-11-23, evening): M8 restructured around the received review report — the
+separate external agent's `CODE_REVIEW_0.1.0.md` (committed `76db648`) was validated
+finding-by-finding against the source tree (all 20: 1 HIGH, 2 MEDIUM, 6 LOW, 11 NOTE; verdict:
+driver core sound, defects concentrated in the documentation/planning layer; one correction to
+the report — F-01's "_faults.py absent" sub-claim is wrong: the file exists and holds
+`DiodeFaultError`, and the phantom classes are the three `Config*Error` names living only in
+six doc sites). New milestone M9 (Address M8 code-review findings) inserted with a per-finding
+checklist built from the review's prioritized action list (§11); former M9 (GitHub publication)
+renumbered to M10 everywhere (Progress checklist, Plan-of-Work intro and scope sections,
+Concrete Steps, Idempotence, Artifacts). D38 records the decision. Awaiting user review of the
+restructured plan before M9 execution begins.
