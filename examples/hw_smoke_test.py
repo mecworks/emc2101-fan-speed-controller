@@ -24,6 +24,9 @@ import time
 
 from emc2101 import _regs as R
 
+# Persistence paths: MicroPython flash root vs. a writable host dir.
+BASE_DIR = os.path.expanduser("~") if sys.platform == "linux" else "/"
+
 
 def build_device():
     """Construct an EMC2101 device for whichever platform we run on."""
@@ -140,7 +143,7 @@ try:
            % rpm)
 
     # ----------------------------------------------- persistence round trip
-    smoke_path = "/emc2101_smoke.json"
+    smoke_path = os.path.join(BASE_DIR, "emc2101_smoke.json")
     orig_sp = dev.scratchpad_get(0)
     orig_lh = dev.local_high_c
     path = dev.save_config(smoke_path)

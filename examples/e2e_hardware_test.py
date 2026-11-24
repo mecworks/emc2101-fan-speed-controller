@@ -36,8 +36,10 @@ from emc2101._core import (ALERT_MODE_COMPARATOR, ALERT_MODE_INTERRUPT,
                           FILTER_LEVEL_2)
 from emc2101._tables import IDEALITY_FACTORS, ideality_factor
 
-FLAG_FILE = "/emc2101_e2e_coldboot.flag"
-PROFILE_FILE = "/emc2101_e2e_profile.json"
+# Persistence paths: MicroPython flash root vs. a writable host dir.
+BASE_DIR = os.path.expanduser("~") if sys.platform == "linux" else "/"
+FLAG_FILE = os.path.join(BASE_DIR, "emc2101_e2e_coldboot.flag")
+PROFILE_FILE = os.path.join(BASE_DIR, "emc2101_e2e_profile.json")
 
 
 def _exists(path):
@@ -442,7 +444,7 @@ def sec_lifecycle():
 
 # ------------------------------------------------------------------ S9
 def sec_persistence():
-    smoke_path = "/emc2101_e2e_smoke.json"
+    smoke_path = os.path.join(BASE_DIR, "emc2101_e2e_smoke.json")
     orig_sp = dev.scratchpad_get(0)
     orig_lh = dev.local_high_c
     path = dev.save_config(smoke_path)
@@ -455,10 +457,10 @@ def sec_persistence():
            "scratchpad restored by load (%#x)" % dev.scratchpad_get(0))
     expect(dev.local_high_c == orig_lh,
            "local high limit restored by load (%.0f C)" % dev.local_high_c)
-    missing = "/emc2101_e2e_missing_xyz.json"
+    missing = os.path.join(BASE_DIR, "emc2101_e2e_missing_xyz.json")
     expect_raises(OSError, lambda: dev.load_config(missing),
                   "explicit load of a missing file raises OSError")
-    corrupt_path = "/emc2101_e2e_corrupt.json"
+    corrupt_path = os.path.join(BASE_DIR, "emc2101_e2e_corrupt.json")
     f = open(corrupt_path, "w")
     f.write("{ this is not json ]]")
     f.close()
@@ -477,7 +479,7 @@ def sec_persistence():
             pass
     # Cold-boot-with-profile scenario.
     if sys.platform == "linux":
-        cb_path = os.path.expanduser("~/emc2101_e2e_cb.json")
+        cb_path = os.path.join(BASE_DIR, "emc2101_e2e_cb.json")
         dev.save_config(cb_path)
         dev.scratchpad_set(0, dev.scratchpad_get(0) ^ 0xFF)
         dev2 = build_device(config_file=cb_path)
