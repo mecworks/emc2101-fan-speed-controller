@@ -1,6 +1,6 @@
 # Code Review — emc2101 v0.1.0 (M8 independent review)
 
-**Scope:** full tree at `EMC2101_Fan_Speed_controller` (HEAD `930aae2`, working tree clean).
+**Scope:** full tree at `EMC2101_Fan_Speed_controller` (HEAD `401615b`, working tree clean).
 **Method:** adversarial pass over every source, test, doc, example, script index, and research
 document; every register constant, formula, and bit position re-derived against
 `research/emc2101-register-map.md`; git history mined for plan-vs-code drift; all four quality
@@ -44,9 +44,9 @@ informational.
 Six documents assert that persistence raises typed exceptions:
 `ConfigFormatError` / `ConfigValidationError` (`ValueError` subclasses) and `ConfigApplyError`
 (`OSError` subclass). **No such class exists anywhere in the tree.** Git evidence: the M4 commit
-(`d4d4595`) touches no module defining them (`git show d4d4595 --stat`: `_faults.py` not among
+(`bd61cb9`) touches no module defining them (`git show bd61cb9 --stat`: `_faults.py` not among
 changed files); `git log --all -S ConfigFormatError` shows the names appear only in the PLANS.md
-progress text (`d4d4595`) and the M5 docs commit (`21d3bdd`). The M4 plan entry claims "New
+progress text (`bd61cb9`) and the M5 docs commit (`4f11cff`). The M4 plan entry claims "New
 exceptions …" — they were planned, never implemented, and the M5 docs propagated the fiction.
 
 Actual behavior (self-consistent between code and tests): plain `ValueError` for decode /
@@ -117,7 +117,7 @@ back".
 
 **Location:** `CHANGELOG.md` ("mock-backed unit suite (261 tests)") vs final gated state.
 
-Suite grew 261 → 264 (D35 regression tests, `71d50e1`) → 267 (D36, `7c8dcb4`). Verified: 267
+Suite grew 261 → 264 (D35 regression tests, `21fb5fe`) → 267 (D36, `94252f1`). Verified: 267
 tests run and pass on the current tree (§10).
 
 **Disposition: FIX** — update to 267 at release tagging.
@@ -364,7 +364,7 @@ present, and the M5 entry records two doc-vs-code drifts caught and fixed pre-co
 material is conceptual and explicitly attributed in the research trail (single-byte contract
 observation, Adafruit LSB-before-MSB bug noted as a contrast, pull-up diagnostic rule).
 `scripts/rpi/bus_recovery.py` is adapted from the user's own MAX31760 sibling project and
-discloses the provenance in its header (line 18) and in `scripts/README.md` / commit `21ba448`.
+discloses the provenance in its header (line 18) and in `scripts/README.md` / commit `d332b61`.
 Vendor PDFs remain gitignored by explicit filename (D28); `git ls-files` shows nothing under
 `reference/`.
 

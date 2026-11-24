@@ -38,7 +38,7 @@ frequently, and resolve ambiguities autonomously (recording them in the Decision
 - Quality gates after any code change: `python -m unittest discover -s tests -v`,
   `python tools/api_coverage.py`, `python tests/lint_subset.py`,
   `python -m compileall -q emc2101 examples`.
-- Commits: imperative subject lines; commits made by the Chatbox agent that include code
-  changes carry the trailer `Co-authored-by: Chatbox <chatbox@chatboxai.com>`. New Git
-  branches created by the agent are prefixed `chatbox/`.
+- Commits: imperative subject lines; commits carry no co-author trailers — per user
+  instruction (2026-11-23), only the human author is credited on the git history.
+  New Git branches created by the agent are prefixed `chatbox/`.
 - License: LGPL-2.1-or-later (see `LICENSE`).
