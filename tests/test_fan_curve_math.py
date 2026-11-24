@@ -149,6 +149,14 @@ class IdealLinearTestCase(unittest.TestCase):
         self.assertIsNone(self.res["ceiling_pct"])
         self.assertIsNone(self.res["zero_flag"])
 
+    def test_ref_line_endpoints_match_onset_and_last_row(self):
+        lin = self.res["linearity"]
+        x0, y0, x1, y1 = lin["ref_line"]
+        self.assertAlmostEqual(x0, self.res["onset_pct"], places=6)
+        self.assertAlmostEqual(y0, self.res["onset_rpm"], places=6)
+        self.assertAlmostEqual(x1, (N_ROWS - 1) * STEP, places=6)
+        self.assertAlmostEqual(y1, (N_ROWS - 1) * STEP * 20.0, places=6)
+
 
 class SaturatingTailTestCase(unittest.TestCase):
     """Rises linearly to 1800 rpm at 60 %, then holds flat to 100 %."""

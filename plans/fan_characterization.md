@@ -144,6 +144,14 @@ Date/Author: 2026-11-24, agent (approved with the design).
 - Decision: UC10 — development branch `chatbox/fan-characterize`; imperative commit
   subjects; no co-author trailers (per the amended AGENTS.md convention, D41).
 Date/Author: 2026-11-24, agent.
+- Decision: UC11 — the green dotted vertical marks the **onset** (Q2) and is
+  labeled "onset ~P%" rather than the reference plot's "crossover" wording;
+  for the reference fan the two coincide, but onset is the quantity the
+  analysis actually computes and reports. The min-to-max chord drawn by the
+  renderer comes from `linearity["ref_line"]` (endpoints added to the shared
+  analysis result in U3), so the chart always shows exactly the line the
+  deviations were measured against.
+Date/Author: 2026-11-24, agent.
 
 ## Outcomes & Retrospective
 

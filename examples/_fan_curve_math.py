@@ -106,10 +106,14 @@ def analyze(rows, onset_tol_rpm=ONSET_TOL_RPM, onset_frac=ONSET_FRAC,
                      begins rising above its floor (floor fans); None when
                      unmeasurable.
       onset_rpm   -- settled speed at the onset row (annotation aid).
-      linearity   -- dict(max_dev_rpm, max_dev_pct_of_span, at_pct, rms_rpm)
-                     versus the straight line joining the onset point and
-                     the ceiling point; None when fewer than three points
-                     or a non-positive span makes the fit meaningless.
+      linearity   -- dict(max_dev_rpm, max_dev_pct_of_span, at_pct, rms_rpm,
+                          ref_line) versus the straight line joining the
+                     onset point and the ceiling point; ref_line is the
+                     (x0, y0, x1, y1) tuple of that chord's endpoints so
+                     consumers (the renderer) can draw exactly the line
+                     the deviations were measured against; None when fewer
+                     than three points or a non-positive span makes the
+                     fit meaningless.
       ceiling_pct -- duty above which the speed plateaus (walked down from
                      100 % while the local slope stays under the noise
                      floor); None when the curve is still rising at 100 %.
@@ -203,6 +207,7 @@ def analyze(rows, onset_tol_rpm=ONSET_TOL_RPM, onset_frac=ONSET_FRAC,
                 "max_dev_pct_of_span": abs(worst) / span * 100.0,
                 "at_pct": worst_at,
                 "rms_rpm": math.sqrt(sq_sum / m),
+                "ref_line": (x0, y0, x1, y1),
             }
 
     # ---- 0 % anomaly flag ---------------------------------------------
