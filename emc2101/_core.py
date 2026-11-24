@@ -29,7 +29,8 @@ Protocol facts relied upon here (datasheet Rev 2.54; M1 live-confirmed):
   permits exactly ONE modification, after which a power cycle re-locks it.
 """
 
-from ._faults import DiodeFaultError
+from ._faults import (ConfigApplyError, ConfigValidationError,
+                      DiodeFaultError)
 from ._persist import apply_state, collect_state, decode, encode
 from ._regs import (ADDR_FIXED, AMSK_DEFINED, AMSK_HIGH, AMSK_INT, AMSK_LOW,
                     AMSK_TACH, AMSK_TCRIT, BETA_DISABLE_AUTODETECT,
@@ -1188,13 +1189,13 @@ class EMC2101:
         and applies the state in the documented order (see
         emc2101._persist.apply_state). With strict (default True,
         decision D15) every written register is read back and a
-        non-empty diff raises ValueError; the report dict
-        ``{"applied", "warnings", "diff"}`` is returned either way.
+        non-empty diff raises ConfigApplyError; otherwise the report
+        dict ``{"applied", "warnings", "diff"}`` is returned.
 
         UNLIKE the constructor's opt-in auto-load, an explicit load of a
         MISSING FILE RAISES OSError - silence is reserved for first boot.
-        A corrupt/invalid file raises ValueError before any register
-        write occurs."""
+        A corrupt/invalid file raises ConfigFormatError or
+        ConfigValidationError before any register write occurs."""
         p = self.config_path if path is None else path
         if p is None:
             raise ValueError("no config path: pass path or construct "
@@ -1206,7 +1207,7 @@ class EMC2101:
         rev_stored = int(state["device"]["revision"][2:], 16)
         pid_live = self._t.read_byte(REG_PRODUCT_ID)
         if pid_stored != pid_live:
-            raise ValueError(
+            raise ConfigValidationError(
                 "product ID mismatch: config %#x vs device %#x (wrong "
                 "profile for this part?)" % (pid_stored, pid_live))
         rev_live = self._t.read_byte(REG_REVISION)
@@ -1217,8 +1218,9 @@ class EMC2101:
                              strict=strict)
         report["warnings"].extend(warnings)
         if strict and report["diff"]:
-            raise ValueError("post-apply verification failed: %s"
-                             % ", ".join("%s expected %#02x got %#02x"
-                                         % (k, v[0], v[1])
-                                         for k, v in sorted(report["diff"].items())))
+            raise ConfigApplyError(
+                "post-apply verification failed: %s"
+                % ", ".join("%s expected %#02x got %#02x"
+                            % (k, v[0], v[1])
+                            for k, v in sorted(report["diff"].items())))
         return report

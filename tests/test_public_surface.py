@@ -164,7 +164,17 @@ COLLECTION_NAMES = (
 
 EXCEPTION_NAMES = (
     "DiodeFaultError",
+    "ConfigFormatError", "ConfigValidationError", "ConfigApplyError",
 )
+
+# Documented exception model (M8 review finding F-01): which builtin
+# family each domain exception belongs to.
+EXCEPTION_BASES = {
+    "DiodeFaultError": (OSError,),
+    "ConfigApplyError": (OSError,),
+    "ConfigFormatError": (ValueError,),
+    "ConfigValidationError": (ValueError,),
+}
 
 # --- Device-class public surface (M3) ---------------------------------------
 # Every public attribute of the device class, pinned so the coverage gate
@@ -228,11 +238,17 @@ class PublicSurfaceTestCase(unittest.TestCase):
                            if not n.startswith("_"))
         self.assertEqual(actual, EXPECTED_CLASS_MEMBERS)
 
-    def test_exceptions_are_oserror_subclasses_on_both_facades(self):
-        for name in EXCEPTION_NAMES:
+    def test_domain_exceptions_have_documented_bases(self):
+        for name, bases in sorted(EXCEPTION_BASES.items()):
             with self.subTest(name=name):
-                self.assertTrue(issubclass(getattr(mp_mod, name), OSError))
-                self.assertTrue(issubclass(getattr(cp_mod, name), OSError))
+                for base in bases:
+                    self.assertTrue(issubclass(getattr(mp_mod, name), base))
+                    self.assertTrue(issubclass(getattr(cp_mod, name), base))
+        # Cross-family separation: a bad-file error must not masquerade
+        # as a bus failure, and vice versa.
+        self.assertFalse(issubclass(mp_mod.ConfigFormatError, OSError))
+        self.assertFalse(issubclass(mp_mod.ConfigValidationError, OSError))
+        self.assertFalse(issubclass(mp_mod.ConfigApplyError, ValueError))
 
     def test_constants_match_datasheet_on_both_facades(self):
         for name, want in sorted(EXPECTED_VALUES.items()):

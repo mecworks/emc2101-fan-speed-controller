@@ -16,6 +16,8 @@ import unittest
 from fakes import FakeTransport, write_entries
 from emc2101._core import EMC2101 as Core
 from emc2101 import _persist
+from emc2101._faults import (ConfigApplyError, ConfigFormatError,
+                            ConfigValidationError)
 from emc2101._regs import (AMSK_INT, AMSK_TACH, BETA_ENABLE, CFG_ALT_TCH,
                            CFG_DIS_TO, CFG_QUEUE, CFG_TCRITOVRD,
                            FCFG_CLK_OVR, FCFG_POLARITY, FCFG_PROG,
@@ -126,6 +128,37 @@ class SabotagingTransport(object):
         self._inner.write_byte(reg, value)
         if reg == self._victim:
             self._inner.registers[self._victim] ^= 0xFF
+
+    def probe(self):
+        return True
+
+    def scan(self):
+        return [0x4C]
+
+    def delay_ms(self, ms):
+        pass
+
+    def close(self):
+        pass
+
+
+class DeadBusTransport(object):
+    """Wraps a stateful FakeTransport and raises OSError on the Nth
+    write, modelling a bus that dies mid-apply (F-01)."""
+
+    def __init__(self, inner, fail_after=3):
+        self._inner = inner
+        self.fail_after = fail_after
+        self.writes = 0
+
+    def read_byte(self, reg):
+        return self._inner.read_byte(reg)
+
+    def write_byte(self, reg, value):
+        self.writes += 1
+        if self.writes > self.fail_after:
+            raise OSError("bus NACK (simulated mid-apply death)")
+        self._inner.write_byte(reg, value)
 
     def probe(self):
         return True
@@ -263,78 +296,78 @@ class TestEncodeDecode(unittest.TestCase):
         self.assertEqual(json.loads(text)["schema_version"], 1)
 
     def test_decode_rejects_malformed_json(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigFormatError):
             _persist.decode("{not json")
 
     def test_decode_rejects_non_object_root(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigFormatError):
             _persist.decode("[1, 2]")
 
     def test_decode_rejects_unknown_version(self):
-        with self.assertRaisesRegex(ValueError, "version"):
+        with self.assertRaisesRegex(ConfigFormatError, "version"):
             _persist.decode(self._mutate(
                 lambda d: d.update(schema_version=2)))
 
     def test_decode_rejects_missing_section(self):
-        with self.assertRaisesRegex(ValueError, "fan"):
+        with self.assertRaisesRegex(ConfigFormatError, "fan"):
             _persist.decode(self._mutate(lambda d: d.pop("fan")))
 
     def test_decode_rejects_unknown_top_key(self):
-        with self.assertRaisesRegex(ValueError, "extra"):
+        with self.assertRaisesRegex(ConfigFormatError, "extra"):
             _persist.decode(self._mutate(lambda d: d.update(extra=1)))
 
     def test_decode_rejects_unknown_section_key(self):
-        with self.assertRaisesRegex(ValueError, "bogus"):
+        with self.assertRaisesRegex(ConfigValidationError, "bogus"):
             _persist.decode(self._mutate(
                 lambda d: d["limits"].update(bogus=1)))
 
     def test_decode_rejects_bool_where_int_expected(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["limits"].update(local_high_c=True)))
 
     def test_decode_rejects_out_of_range_tcrit(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["limits"].update(tcrit_c=200)))
 
     def test_decode_rejects_bad_external_step(self):
-        with self.assertRaisesRegex(ValueError, "step"):
+        with self.assertRaisesRegex(ConfigValidationError, "step"):
             _persist.decode(self._mutate(
                 lambda d: d["limits"].update(remote_high_c=70.03)))
 
     def test_decode_rejects_lut_wrong_count(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["lut"]["entries"].pop()))
 
     def test_decode_rejects_descending_lut(self):
-        with self.assertRaisesRegex(ValueError, "descend"):
+        with self.assertRaisesRegex(ConfigValidationError, "descend"):
             _persist.decode(self._mutate(
                 lambda d: d["lut"]["entries"][3].update(temp_c=10)))
 
     def test_decode_rejects_bad_conversion_rate(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["misc"].update(conversion_rate_per_s=3.0)))
 
     def test_decode_rejects_bad_spin_time(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["fan"]["spin_up"].update(time_s=1.0)))
 
     def test_decode_rejects_inconsistent_frequency(self):
-        with self.assertRaisesRegex(ValueError, "pwm_freq_hz"):
+        with self.assertRaisesRegex(ConfigValidationError, "pwm_freq_hz"):
             _persist.decode(self._mutate(
                 lambda d: d["fan"].update(pwm_freq_hz=12345.0)))
 
     def test_decode_rejects_bad_device_stamp(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigValidationError):
             _persist.decode(self._mutate(
                 lambda d: d["device"].update(product_id="16")))
 
     def test_decode_rejects_spinup_enabled_time_disagreement(self):
-        with self.assertRaisesRegex(ValueError, "disagree"):
+        with self.assertRaisesRegex(ConfigValidationError, "disagree"):
             _persist.decode(self._mutate(
                 lambda d: d["fan"]["spin_up"].update(enabled=False)))
 
@@ -478,7 +511,7 @@ class TestApplyState(unittest.TestCase):
         src = FakeTransport(registers=modified_image())
         state = _persist.collect_state(src.read_byte, src.write_byte)
         state["lut"]["entries"][3]["temp_c"] = 10
-        with self.assertRaisesRegex(ValueError, "descend"):
+        with self.assertRaisesRegex(ConfigValidationError, "descend"):
             _persist.apply_state(target.write_byte, target.read_byte,
                                  state)
         self.assertFalse(any(e[0] == "write" for e in target.log))
@@ -544,7 +577,7 @@ class TestCorePersistenceGlue(unittest.TestCase):
         with open(self.path, "w") as f:
             f.write("garbage {{{")
         dev, t = self._dev()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigFormatError):
             dev.load_config()
         self.assertFalse(any(e[0] == "write" for e in t.log))
 
@@ -555,7 +588,8 @@ class TestCorePersistenceGlue(unittest.TestCase):
         with open(self.path, "w") as f:
             f.write(_persist.encode(state))
         dev, t = self._dev()
-        with self.assertRaisesRegex(ValueError, "product ID mismatch"):
+        with self.assertRaisesRegex(ConfigValidationError,
+                                    "product ID mismatch"):
             dev.load_config()
         self.assertFalse(any(e[0] == "write" for e in t.log))
 
@@ -591,19 +625,28 @@ class TestCorePersistenceGlue(unittest.TestCase):
         with open(self.path, "w") as f:
             f.write("{{{")
         t = FakeTransport(registers=base_image())
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ConfigFormatError):
             Core(t, config_file=self.path, auto_load=True)
         self.assertFalse(any(e[0] == "write" for e in t.log))
 
-    def test_strict_readback_failure_raises_value_error(self):
+    def test_strict_readback_failure_raises_apply_error(self):
         dev, _ = self._dev(modified_image())
         dev.save_config()
         inner = FakeTransport(registers=base_image())
         dev._t = SabotagingTransport(inner, REG_IDEALITY)
-        with self.assertRaisesRegex(ValueError, "verification failed"):
+        with self.assertRaisesRegex(ConfigApplyError,
+                                    "verification failed"):
             dev.load_config(strict=True)
         report = dev.load_config(strict=False)
         self.assertEqual(report["diff"], {})      # read-back skipped
+
+    def test_load_config_mid_apply_failure_raises_apply_error(self):
+        dev, _ = self._dev(modified_image())
+        dev.save_config()
+        inner = FakeTransport(registers=base_image())
+        dev._t = DeadBusTransport(inner, fail_after=3)
+        with self.assertRaises(ConfigApplyError):
+            dev.load_config(strict=True)
 
 
 class TestProgQuirkModel(unittest.TestCase):
@@ -705,6 +748,44 @@ class TestProgQuirkModel(unittest.TestCase):
         report = _persist.apply_state(sabotage.write_byte, mt.read_byte,
                                       state, strict=True)
         self.assertIn("%#02x" % REG_IDEALITY, report["diff"])
+
+
+class TestTypedExceptions(unittest.TestCase):
+    """M8 review finding F-01: the documented typed error model."""
+
+    def test_hierarchy_roots(self):
+        self.assertTrue(issubclass(ConfigFormatError, ValueError))
+        self.assertTrue(issubclass(ConfigValidationError, ValueError))
+        self.assertTrue(issubclass(ConfigApplyError, OSError))
+        self.assertFalse(issubclass(ConfigFormatError, OSError))
+        self.assertFalse(issubclass(ConfigValidationError, OSError))
+        self.assertFalse(issubclass(ConfigApplyError, ValueError))
+
+    def test_facade_exports_are_the_same_classes(self):
+        import emc2101.cp as cp_mod
+        import emc2101.mp as mp_mod
+        from emc2101 import _faults
+        for name in ("ConfigFormatError", "ConfigValidationError",
+                     "ConfigApplyError"):
+            with self.subTest(name=name):
+                self.assertIs(getattr(mp_mod, name),
+                              getattr(_faults, name))
+                self.assertIs(getattr(cp_mod, name),
+                              getattr(_faults, name))
+
+    def test_decode_malformed_json_raises_format_error(self):
+        with self.assertRaises(ConfigFormatError):
+            _persist.decode("{not json")
+
+    def test_apply_bus_failure_raises_apply_error(self):
+        inner = FakeTransport(registers=base_image())
+        src = FakeTransport(registers=modified_image())
+        state = _persist.collect_state(src.read_byte, src.write_byte)
+        dead = DeadBusTransport(inner, fail_after=3)
+        with self.assertRaises(ConfigApplyError) as cm:
+            _persist.apply_state(dead.write_byte, dead.read_byte, state)
+        self.assertIsInstance(cm.exception.__cause__, OSError)
+        self.assertEqual(dead.writes, 4)          # died on the 4th write
 
 
 if __name__ == "__main__":

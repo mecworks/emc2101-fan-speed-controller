@@ -22,6 +22,8 @@ counts) is deliberately NOT persisted.
 import json
 import time
 
+from ._faults import (ConfigApplyError,
+                    ConfigFormatError, ConfigValidationError)
 from ._regs import (AMSK_DEFINED, AMSK_HIGH, AMSK_INT, AMSK_LOW, AMSK_TACH,
                     AMSK_TCRIT, BETA_ENABLE, BETA_FIELD_MASK,
                     BASE_CLOCK_1P4K_HZ, BASE_CLOCK_360K_HZ, CFG_DAC,
@@ -107,7 +109,7 @@ _HEX_DIGITS = "0123456789abcdefABCDEF"
 # --- Small validators --------------------------------------------------------
 
 def _fail(field, msg):
-    raise ValueError("%s: %s" % (field, msg))
+    raise ConfigValidationError("%s: %s" % (field, msg))
 
 
 def _bool(value, field):
@@ -199,10 +201,13 @@ def encode(state):
 def decode(text):
     """Parse and validate schema-v1 JSON text into a state dict.
 
-    Raises ValueError naming the offending field for any structural
-    problem: malformed JSON, unknown version, wrong shape, unknown or
+    Raises ConfigFormatError for structural problems (malformed JSON,
+    non-object root, unknown or missing top-level sections, unsupported
+    schema version) and ConfigValidationError naming the offending field
+    for semantic problems: wrong shape inside a section, unknown or
     missing keys, out-of-range values, a descending LUT, or a
-    pwm_freq_hz inconsistent with the stored PWM fields.
+    pwm_freq_hz inconsistent with the stored PWM fields. Both are
+    ValueError subclasses raised before any register write.
 
     NOTE on LUT ordering: the WRITE path (core ``lut`` setters) demands
     strictly ascending thresholds because equal programmed thresholds
@@ -214,18 +219,21 @@ def decode(text):
     try:
         data = json.loads(text)
     except ValueError:
-        raise ValueError("config is not valid JSON")
+        raise ConfigFormatError("config is not valid JSON")
     if not isinstance(data, dict):
-        raise ValueError("config root must be a JSON object")
+        raise ConfigFormatError("config root must be a JSON object")
     extra = sorted(set(data) - set(_TOP_KEYS))
     missing = sorted(set(_TOP_KEYS) - set(data))
     if extra:
-        raise ValueError("unknown top-level key(s) %s" % ", ".join(extra))
+        raise ConfigFormatError(
+            "unknown top-level key(s) %s" % ", ".join(extra))
     if missing:
-        raise ValueError("missing top-level key(s) %s" % ", ".join(missing))
+        raise ConfigFormatError(
+            "missing top-level key(s) %s" % ", ".join(missing))
     if data["schema_version"] != SCHEMA_VERSION:
-        raise ValueError("unsupported schema version %r (want %d)"
-                         % (data["schema_version"], SCHEMA_VERSION))
+        raise ConfigFormatError(
+            "unsupported schema version %r (want %d)"
+            % (data["schema_version"], SCHEMA_VERSION))
     if not isinstance(data["saved_at_utc"], str) \
             or not data["saved_at_utc"]:
         _fail("saved_at_utc", "must be a non-empty string")
@@ -590,6 +598,11 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
     Returns a report dict: ``{"applied": True, "warnings": [...],
     "diff": {addr_hex: (expected, actual)}}``. Callers surface the
     warnings and decide how to act on a non-empty diff.
+
+    Raises ConfigValidationError on a bad LUT shape or ordering (before
+    any bus traffic) and ConfigApplyError (an OSError subclass) when a
+    bus failure interrupts the apply; the chip may then be left
+    partially configured.
     """
     warnings = []
     expected = {}
@@ -601,163 +614,169 @@ def apply_state(write_byte, read_byte, state, *, strict=True):
     # 1. Pre-flight: LUT shape and ordering (cheap; no bus traffic yet).
     entries = state["lut"]["entries"]
     if len(entries) != LUT_ENTRIES:
-        raise ValueError("lut must have exactly %d entries, got %d"
-                         % (LUT_ENTRIES, len(entries)))
+        raise ConfigValidationError(
+            "lut must have exactly %d entries, got %d"
+            % (LUT_ENTRIES, len(entries)))
     prev = None
     for i in range(len(entries)):
         t = int(round(float(entries[i]["temp_c"])))
         if prev is not None and t < prev:
-            raise ValueError("lut thresholds must not descend "
-                             "(entry %d: %r after %r)" % (i, t, prev))
+            raise ConfigValidationError(
+                "lut thresholds must not descend "
+                "(entry %d: %r after %r)" % (i, t, prev))
         prev = t
 
-    # 2. Ensure PROG=1 (Fan Setting + LUT writable).
-    fc_cur = read_byte(REG_FAN_CFG)
-    if not (fc_cur & FCFG_PROG):
-        wr(REG_FAN_CFG, fc_cur | FCFG_PROG)
+    try:
+        # 2. Ensure PROG=1 (Fan Setting + LUT writable).
+        fc_cur = read_byte(REG_FAN_CFG)
+        if not (fc_cur & FCFG_PROG):
+            wr(REG_FAN_CFG, fc_cur | FCFG_PROG)
 
-    # 3a. Config section (whole byte; reserved bits written 0).
-    co = state["config"]
-    cfg_new = 0
-    if co["standby"]:
-        cfg_new |= CFG_STANDBY
-    if co["fan_standby"]:
-        cfg_new |= CFG_FAN_STANDBY
-    if co["dac_enabled"]:
-        cfg_new |= CFG_DAC
-    if co["dis_to"]:
-        cfg_new |= CFG_DIS_TO
-    if co["tach_input"]:
-        cfg_new |= CFG_ALT_TCH
-    if co["queue_3sample"]:
-        cfg_new |= CFG_QUEUE
-    wr(REG_CONFIG, cfg_new)
-    am_new = 0
-    if co["alert_mask"]["int"]:
-        am_new |= AMSK_INT
-    if co["alert_mask"]["high"]:
-        am_new |= AMSK_HIGH
-    if co["alert_mask"]["low"]:
-        am_new |= AMSK_LOW
-    if co["alert_mask"]["tcrit"]:
-        am_new |= AMSK_TCRIT
-    if co["alert_mask"]["tach"]:
-        am_new |= AMSK_TACH
-    # Reserved mask bits are preserved (their read-back behaviour varies;
-    # an RMW keeps whatever the chip holds there).
-    wr(REG_ALERT_MASK,
-       (read_byte(REG_ALERT_MASK) & ~AMSK_DEFINED) | am_new)
+        # 3a. Config section (whole byte; reserved bits written 0).
+        co = state["config"]
+        cfg_new = 0
+        if co["standby"]:
+            cfg_new |= CFG_STANDBY
+        if co["fan_standby"]:
+            cfg_new |= CFG_FAN_STANDBY
+        if co["dac_enabled"]:
+            cfg_new |= CFG_DAC
+        if co["dis_to"]:
+            cfg_new |= CFG_DIS_TO
+        if co["tach_input"]:
+            cfg_new |= CFG_ALT_TCH
+        if co["queue_3sample"]:
+            cfg_new |= CFG_QUEUE
+        wr(REG_CONFIG, cfg_new)
+        am_new = 0
+        if co["alert_mask"]["int"]:
+            am_new |= AMSK_INT
+        if co["alert_mask"]["high"]:
+            am_new |= AMSK_HIGH
+        if co["alert_mask"]["low"]:
+            am_new |= AMSK_LOW
+        if co["alert_mask"]["tcrit"]:
+            am_new |= AMSK_TCRIT
+        if co["alert_mask"]["tach"]:
+            am_new |= AMSK_TACH
+        # Reserved mask bits are preserved (their read-back behaviour varies;
+        # an RMW keeps whatever the chip holds there).
+        wr(REG_ALERT_MASK,
+           (read_byte(REG_ALERT_MASK) & ~AMSK_DEFINED) | am_new)
 
-    # 3b. Calibration.
-    cal = state["calibration"]
-    wr(REG_IDEALITY, cal["ideality_index"])
-    beta = cal["beta_index"] & BETA_FIELD_MASK
-    if cal["beta_auto_detect"]:
-        beta |= BETA_ENABLE
-    wr(REG_BETA, beta)
+        # 3b. Calibration.
+        cal = state["calibration"]
+        wr(REG_IDEALITY, cal["ideality_index"])
+        beta = cal["beta_index"] & BETA_FIELD_MASK
+        if cal["beta_auto_detect"]:
+            beta |= BETA_ENABLE
+        wr(REG_BETA, beta)
 
-    # 3c. Misc.
-    mi = state["misc"]
-    wr(REG_CONV_RATE, conv_rate_encode(mi["conversion_rate_per_s"]))
-    wr(REG_FILTER, _FILTER_ENC[mi["averaging_filter"]]
-       | (FLT_COMP if state["config"]["alert_mode"] == "comparator" else 0))
-    tl = mi["tach_limit_count"]
-    wr(REG_TACH_LIMIT_LO, tl & 0xFF)
-    wr(REG_TACH_LIMIT_HI, (tl >> 8) & 0xFF)
-    wr(REG_SCRATCHPAD_1, mi["scratchpad"][0])
-    wr(REG_SCRATCHPAD_2, mi["scratchpad"][1])
+        # 3c. Misc.
+        mi = state["misc"]
+        wr(REG_CONV_RATE, conv_rate_encode(mi["conversion_rate_per_s"]))
+        wr(REG_FILTER, _FILTER_ENC[mi["averaging_filter"]]
+           | (FLT_COMP if state["config"]["alert_mode"] == "comparator" else 0))
+        tl = mi["tach_limit_count"]
+        wr(REG_TACH_LIMIT_LO, tl & 0xFF)
+        wr(REG_TACH_LIMIT_HI, (tl >> 8) & 0xFF)
+        wr(REG_SCRATCHPAD_1, mi["scratchpad"][0])
+        wr(REG_SCRATCHPAD_2, mi["scratchpad"][1])
 
-    # 3d. Limits (TCRIT special-cased).
-    li = state["limits"]
-    wr(REG_INT_LIMIT, int_temp_to_raw(li["local_high_c"]))
-    raw = ext_temp_to_raw(li["remote_high_c"])
-    wr(REG_EXT_HIGH_MSB, (raw >> 3) & 0xFF)
-    wr(REG_EXT_HIGH_LSB, raw & 0x07)
-    raw = ext_temp_to_raw(li["remote_low_c"])
-    wr(REG_EXT_LOW_MSB, (raw >> 3) & 0xFF)
-    wr(REG_EXT_LOW_LSB, raw & 0x07)
-    cur_tc = read_byte(REG_TCRIT)
-    st_tc = li["tcrit_c"]
-    if st_tc != cur_tc:
-        if st_tc == TCRIT_LOCKED_C:
-            warnings.append(
-                "tcrit restore skipped: stored %d C but the device holds "
-                "%#x; the one-time unlock was already consumed, a power "
-                "cycle is required to restore %d C"
-                % (st_tc, cur_tc, st_tc))
-        else:
-            cfg_now = read_byte(REG_CONFIG)
-            if not (cfg_now & CFG_TCRITOVRD):
-                wr(REG_CONFIG, cfg_now | CFG_TCRITOVRD)
-            wr(REG_TCRIT, int_temp_to_raw(st_tc))
-    wr(REG_TCRIT_HYST, li["tcrit_hysteresis_c"])
+        # 3d. Limits (TCRIT special-cased).
+        li = state["limits"]
+        wr(REG_INT_LIMIT, int_temp_to_raw(li["local_high_c"]))
+        raw = ext_temp_to_raw(li["remote_high_c"])
+        wr(REG_EXT_HIGH_MSB, (raw >> 3) & 0xFF)
+        wr(REG_EXT_HIGH_LSB, raw & 0x07)
+        raw = ext_temp_to_raw(li["remote_low_c"])
+        wr(REG_EXT_LOW_MSB, (raw >> 3) & 0xFF)
+        wr(REG_EXT_LOW_LSB, raw & 0x07)
+        cur_tc = read_byte(REG_TCRIT)
+        st_tc = li["tcrit_c"]
+        if st_tc != cur_tc:
+            if st_tc == TCRIT_LOCKED_C:
+                warnings.append(
+                    "tcrit restore skipped: stored %d C but the device holds "
+                    "%#x; the one-time unlock was already consumed, a power "
+                    "cycle is required to restore %d C"
+                    % (st_tc, cur_tc, st_tc))
+            else:
+                cfg_now = read_byte(REG_CONFIG)
+                if not (cfg_now & CFG_TCRITOVRD):
+                    wr(REG_CONFIG, cfg_now | CFG_TCRITOVRD)
+                wr(REG_TCRIT, int_temp_to_raw(st_tc))
+        wr(REG_TCRIT_HYST, li["tcrit_hysteresis_c"])
 
-    # 4. LUT (duties quantize onto the STORED PWM_F grid).
-    lu = state["lut"]
-    pwm_f_store = state["fan"]["pwm_f"]
-    for i in range(LUT_ENTRIES):
-        entry = lu["entries"][i]
-        wr(REG_LUT_BASE + 2 * i, int_temp_to_raw(int(round(
-            float(entry["temp_c"])))))
-        wr(REG_LUT_BASE + 2 * i + 1,
-           duty_pct_to_setting(entry["duty_pct"], pwm_f_store))
-    wr(REG_LUT_HYST, lu["hysteresis_c"])
+        # 4. LUT (duties quantize onto the STORED PWM_F grid).
+        lu = state["lut"]
+        pwm_f_store = state["fan"]["pwm_f"]
+        for i in range(LUT_ENTRIES):
+            entry = lu["entries"][i]
+            wr(REG_LUT_BASE + 2 * i, int_temp_to_raw(int(round(
+                float(entry["temp_c"])))))
+            wr(REG_LUT_BASE + 2 * i + 1,
+               duty_pct_to_setting(entry["duty_pct"], pwm_f_store))
+        wr(REG_LUT_HYST, lu["hysteresis_c"])
 
-    # 5. Fan configuration LAST, ending with the stored PROG value.
-    fa = state["fan"]
-    wr(REG_FAN_SETTING, duty_pct_to_setting(fa["duty_pct"], fa["pwm_f"]))
-    wr(REG_PWM_F, fa["pwm_f"])
-    wr(REG_PWM_D, fa["pwm_div"])
-    fc_final = fc_cur & FCFG_TACH_M_MASK     # preserve TACH_M (not in v1)
-    if fa["output_inverted"]:
-        fc_final |= FCFG_POLARITY
-    if fa["clk_sel"]:
-        fc_final |= FCFG_CLK_SEL
-    if fa["clk_ovr"]:
-        fc_final |= FCFG_CLK_OVR
-    if fa["force"]["enabled"]:
-        fc_final |= FCFG_FORCE
-    if fa["manual"]:
-        fc_final |= FCFG_PROG
-    wr(REG_FAN_CFG, fc_final)
-    su = 0
-    if fa["spin_up"]["fast_tach"]:
-        su |= SU_FAST_TACH
-    su |= _DRIVE_ENC[fa["spin_up"]["drive_pct"]]
-    su |= _TIME_ENC[fa["spin_up"]["time_s"]]
-    wr(REG_SPINUP, su)
-    wr(REG_EXT_FORCE, int_temp_to_raw(fa["force"]["temp_c"]))
+        # 5. Fan configuration LAST, ending with the stored PROG value.
+        fa = state["fan"]
+        wr(REG_FAN_SETTING, duty_pct_to_setting(fa["duty_pct"], fa["pwm_f"]))
+        wr(REG_PWM_F, fa["pwm_f"])
+        wr(REG_PWM_D, fa["pwm_div"])
+        fc_final = fc_cur & FCFG_TACH_M_MASK     # preserve TACH_M (not in v1)
+        if fa["output_inverted"]:
+            fc_final |= FCFG_POLARITY
+        if fa["clk_sel"]:
+            fc_final |= FCFG_CLK_SEL
+        if fa["clk_ovr"]:
+            fc_final |= FCFG_CLK_OVR
+        if fa["force"]["enabled"]:
+            fc_final |= FCFG_FORCE
+        if fa["manual"]:
+            fc_final |= FCFG_PROG
+        wr(REG_FAN_CFG, fc_final)
+        su = 0
+        if fa["spin_up"]["fast_tach"]:
+            su |= SU_FAST_TACH
+        su |= _DRIVE_ENC[fa["spin_up"]["drive_pct"]]
+        su |= _TIME_ENC[fa["spin_up"]["time_s"]]
+        wr(REG_SPINUP, su)
+        wr(REG_EXT_FORCE, int_temp_to_raw(fa["force"]["temp_c"]))
 
-    # 6. Strict post-apply read-back (decision D15).
-    diff = {}
-    if strict:
-        prog_off = not (fc_final & FCFG_PROG)
-        if prog_off:
-            write_byte(REG_FAN_CFG, fc_final | FCFG_PROG)
-            _settle_ms(SETTLE_MS)   # let the read-out switch over (D36)
-        for reg in sorted(expected):
-            actual = read_byte(reg)
-            want = expected[reg]
-            if prog_off and reg == REG_FAN_CFG:
-                want |= FCFG_PROG     # read under the temporary bit
-            if actual != want:
-                diff["%#02x" % reg] = (expected[reg], actual)
-        if diff:
-            # A first pass can still catch the fan-control read-out
-            # mid-switch-over when the step-2 PROG transition armed the
-            # stale window earlier in the apply (D36): give it another
-            # settling window and re-check only the disagreeing regs.
-            _settle_ms(SETTLE_MS)
-            settled = {}
-            for reg_hex in sorted(diff):
-                reg = int(reg_hex, 16)
+        # 6. Strict post-apply read-back (decision D15).
+        diff = {}
+        if strict:
+            prog_off = not (fc_final & FCFG_PROG)
+            if prog_off:
+                write_byte(REG_FAN_CFG, fc_final | FCFG_PROG)
+                _settle_ms(SETTLE_MS)   # let the read-out switch over (D36)
+            for reg in sorted(expected):
                 actual = read_byte(reg)
                 want = expected[reg]
                 if prog_off and reg == REG_FAN_CFG:
-                    want |= FCFG_PROG
+                    want |= FCFG_PROG     # read under the temporary bit
                 if actual != want:
-                    settled[reg_hex] = (expected[reg], actual)
-            diff = settled
-        if prog_off:
-            write_byte(REG_FAN_CFG, fc_final)
+                    diff["%#02x" % reg] = (expected[reg], actual)
+            if diff:
+                # A first pass can still catch the fan-control read-out
+                # mid-switch-over when the step-2 PROG transition armed the
+                # stale window earlier in the apply (D36): give it another
+                # settling window and re-check only the disagreeing regs.
+                _settle_ms(SETTLE_MS)
+                settled = {}
+                for reg_hex in sorted(diff):
+                    reg = int(reg_hex, 16)
+                    actual = read_byte(reg)
+                    want = expected[reg]
+                    if prog_off and reg == REG_FAN_CFG:
+                        want |= FCFG_PROG
+                    if actual != want:
+                        settled[reg_hex] = (expected[reg], actual)
+                diff = settled
+            if prog_off:
+                write_byte(REG_FAN_CFG, fc_final)
+    except OSError as exc:
+        raise ConfigApplyError(
+            "apply failed mid-write: %s" % (exc,)) from exc
     return {"applied": True, "warnings": warnings, "diff": diff}

@@ -14,7 +14,8 @@ import os
 from ._core import (ALERT_MODE_COMPARATOR, ALERT_MODE_INTERRUPT,
                     FILTER_LEVEL_1, FILTER_LEVEL_2, FILTER_OFF)
 from ._core import EMC2101 as _Core
-from ._faults import DiodeFaultError
+from ._faults import (ConfigApplyError, ConfigFormatError,
+                      ConfigValidationError, DiodeFaultError)
 from ._transport_cp import TransportCP
 from ._regs import (
     ADDR_FIXED, ARA_GENERAL_CALL,
@@ -70,6 +71,7 @@ _DEFAULT_CONFIG_PATH = os.path.expanduser("~/emc2101.json")
 __all__ = [
     "EMC2101",
     "DiodeFaultError",
+    "ConfigFormatError", "ConfigValidationError", "ConfigApplyError",
     "ALERT_MODE_INTERRUPT", "ALERT_MODE_COMPARATOR",
     "FILTER_OFF", "FILTER_LEVEL_1", "FILTER_LEVEL_2",
     "ADDR_FIXED", "ARA_GENERAL_CALL",
