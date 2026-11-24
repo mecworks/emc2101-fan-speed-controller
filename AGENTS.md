@@ -35,6 +35,7 @@ frequently, and resolve ambiguities autonomously (recording them in the Decision
   self-contained, and any state-mutating script must be self-restoring. Shipped demos and
   the canonical tri-platform E2E suites live in `examples/`; hardware-free dev utilities
   (coverage, lint, deploy) live in `tools/`.
+- Utility planning/tracking documents live in `plans/` (one file per utility, e.g. `plans/fan_characterization.md`); `PLANS.md` governs the driver only.
 - Quality gates after any code change: `python -m unittest discover -s tests -v`,
   `python tools/api_coverage.py`, `python tests/lint_subset.py`,
   `python -m compileall -q emc2101 examples`.
