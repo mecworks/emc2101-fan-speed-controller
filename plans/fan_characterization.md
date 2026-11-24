@@ -81,6 +81,16 @@ running that command yields `curve.png` and `curve.meta.json`.
     and fixed (no-flush stdout under mpremote, absent time.strftime); harness
     extended to cover both. RPi native leg still pending bench loadout (breakout not
     yet on bus 1).
+  - (2026-11-24) Onset-correction pass (user review of the rendered PNG): the green
+    onset marker sat at 24.2 % while the visible knee is just past 20 %. Root cause:
+    the onset tolerance was keyed to the absolute peak (2 % of 2367 rpm = 47 rpm),
+    which swallowed the fan's gentle initial climb (687 -> 719 -> 754 rpm) and pushed
+    the first sustained crossing one grid step late. Fix per UC15: the tolerance now
+    scales with the dynamic range (peak - floor); onset moves to 22.6 %, the reference
+    chord re-anchors to 719@23% -> 2367@100 %, and the linearity stats recompute
+    consistently (max dev +15 rpm @ 98 %, RMS 7 rpm). PNG and meta.json re-rendered
+    from the unchanged CSV; a golden regression test on this very sweep pins the
+    corrected behaviour.
 
 ## Surprises & Discoveries
 
@@ -138,6 +148,17 @@ running that command yields `curve.png` and `curve.meta.json`.
   effect and every scenario silently ran on all-defaults (scenario A's "built-in"
   pass was actually the skip-path default). Fixed by resolving the path at call
   time; the harness now asserts the recorded verdict string from stderr.
+- (2026-11-24, U4) A peak-keyed onset tolerance buried a real feature: the
+  SickleFlow 92 leaves its ~682 rpm floor gradually (687 -> 719 -> 754 rpm over
+  the first three rise rows), and `max(10 rpm, 2 % of PEAK)` (= 47 rpm here)
+  demanded more headroom than the early climb had, so the detector reported
+  onset at 24.2 % -- one grid step past the visible knee (caught by the user
+  reading the PNG against the CSV). Scaling the fractional term to the dynamic
+  range instead (2 % of peak-minus-floor = 34 rpm) restores sensitivity without
+  loosening the noise guard for small-range fans (the 10 rpm absolute floor
+  still wins when the span is narrow). Lesson: heuristic tolerances that scale
+  with an ABSOLUTE quantity drift as the DUT changes; scale them with the
+  quantity being measured.
 
 ## Decision Log
 
@@ -258,6 +279,32 @@ the fan — a bench-installed resistor makes any fan look built-in. Alternatives
 rejected: inferring from the breakout's pull-up jumper state (not readable over
 I2C) and manually correcting metadata after the fact (leaves the tooling free to
 repeat the error on the next fan).
+Date/Author: 2026-11-24, agent (forced by user correction).
+- Decision: UC14 -- bench artifacts are laid out per-DUT/per-platform under
+  `bench-data/<Fan Make Model>/<platform>/duty_curve_<YYYY-MM-DD>.*` (CSV, PNG,
+  meta.json sidecar, raw merged capture as audit trail), with the convention
+  documented in `bench-data/README.md`.
+Rationale: the flat reference directory would crowd quickly as more fans and
+platforms accumulate; the date prefix makes repeat runs non-destructive, and
+keeping the raw capture preserves superseded intermediate states for audit.
+(Retroactively logged: the layout was adopted during the first live run before
+it received a decision-log entry.)
+Date/Author: 2026-11-24, agent (adopted during U4, logged late).
+- Decision: UC15 -- the onset tolerance's fractional term scales with the
+  dynamic range (peak - floor baseline), not the absolute peak: threshold =
+  baseline + max(ONSET_TOL_RPM, ONSET_FRAC * (peak - baseline)), extracted into
+  a named helper `onset_threshold()` shared by the onset walk and the 0 %
+  anomaly flag.
+Rationale: on the live SickleFlow 92 sweep the peak-keyed form (2 % of 2367 =
+47 rpm) exceeded the fan's entire early-climb headroom, placing the onset
+marker one grid step (24.2 %) past the visible knee (~22.6 %); the user flagged
+the discrepancy by comparing the PNG with the CSV. The span-relative form
+measures "rise above the floor relative to how much the fan CAN rise", which
+is invariant across DUTs; the 10 rpm absolute floor preserves noise immunity
+for low-dynamic-range fans. Consequences: the reference chord and all
+linearity statistics re-anchor automatically (they consume
+`linearity["ref_line"]`), so chart and text summary stay consistent; a golden
+regression test on the committed live sweep pins the corrected behaviour.
 Date/Author: 2026-11-24, agent (forced by user correction).
 
 ## Outcomes & Retrospective
@@ -405,3 +452,8 @@ Runtime note: sweep ≈ 63 × 5 s ≈ 5.3 min plus pre-flight.
   options A/B/C → A (examples + tools); platform scenarios 1–3 accepted; metadata option A
   plus PNG footer; sweep granularity option A (full raw grid); `plans/` directory for
   utility planning documents.
+- 2026-11-24: UC15 -- onset tolerance rescaled from absolute peak to dynamic range
+  (peak - floor) after the user identified the onset marker sitting one grid step
+  past the visible knee on the live SickleFlow 92 chart; `onset_threshold()` helper
+  added, PNG/meta.json re-rendered from the unchanged CSV, golden regression test
+  added. UC14 (per-DUT bench-data layout) retroactively logged.

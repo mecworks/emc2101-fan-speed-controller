@@ -9,16 +9,16 @@
   "analysis": {
     "turns_off": false,
     "floor_rpm": 682.2,
-    "onset_pct": 24.2,
-    "onset_rpm": 753.7,
+    "onset_pct": 22.6,
+    "onset_rpm": 719.1,
     "linearity": {
-      "max_dev_rpm": 15.462269129287506,
-      "max_dev_pct_of_span": 0.9581873414691395,
+      "max_dev_rpm": 15.473385012919607,
+      "max_dev_pct_of_span": 0.9387481048910761,
       "at_pct": 98.4,
-      "rms_rpm": 6.397976965355182,
+      "rms_rpm": 6.520567766099637,
       "ref_line": [
-        24.2,
-        753.7,
+        22.6,
+        719.1,
         100.0,
         2367.4
       ]

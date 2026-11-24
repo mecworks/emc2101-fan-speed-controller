@@ -24,7 +24,7 @@ CSV_HEADER = "pct,rpm_settled,rpm_min,rpm_max"
 
 #: Default heuristic thresholds for :func:`analyze` (see each docstring).
 ONSET_TOL_RPM = 10.0          #: absolute rise above the floor plateau
-ONSET_FRAC = 0.02             #: ...or this fraction of the peak speed
+ONSET_FRAC = 0.02             #: ...or this fraction of the dynamic range (peak - floor)
 SUSTAIN_ROWS = 3              #: consecutive rows above threshold => onset
 NOISE_FLOOR_RPM_PER_PCT = 1.0 #: local slope below this counts as a plateau
 PLATEAU_WINDOW_ROWS = 5       #: window used for the local-slope test
@@ -56,6 +56,19 @@ def median(values):
     if n % 2:
         return float(vals[mid])
     return (vals[mid - 1] + vals[mid]) / 2.0
+
+
+def onset_threshold(baseline, peak, tol_rpm=ONSET_TOL_RPM, frac=ONSET_FRAC):
+    """Speed threshold marking the end of the low-duty plateau.
+
+    A floor-holding fan counts as "beginning to rise" once its speed
+    exceeds the plateau baseline by at least ``max(tol_rpm,
+    frac * (peak - baseline))``. The fractional term scales with the
+    dynamic range being measured (peak minus floor), not the absolute
+    peak: keyed to the peak, the tolerance swallows the early part of a
+    gradual rise on high-speed fans (UC15).
+    """
+    return baseline + max(tol_rpm, frac * (peak - baseline))
 
 
 def format_csv_row(pct, rpm_settled, rpm_min, rpm_max):
@@ -90,7 +103,9 @@ def analyze(rows, onset_tol_rpm=ONSET_TOL_RPM, onset_frac=ONSET_FRAC,
            ascending duty order (the collector's emission order).
     onset_tol_rpm / onset_frac : a floor-holding fan counts as "beginning
            to rise" once its speed exceeds the low-duty plateau baseline by
-           at least ``max(onset_tol_rpm, onset_frac * peak)``.
+           at least ``max(onset_tol_rpm, onset_frac * (peak - baseline))``
+           (:func:`onset_threshold`; span-relative so the tolerance tracks
+           the dynamic range being measured, UC15).
     sustain : the excess must hold for this many consecutive rows before
            the first such row is reported as the onset.
     noise_floor_rpm_per_pct : local slope (rpm per percent of duty) below
@@ -151,7 +166,7 @@ def analyze(rows, onset_tol_rpm=ONSET_TOL_RPM, onset_frac=ONSET_FRAC,
                 break
     else:
         floor_rpm = baseline
-        thr = baseline + max(onset_tol_rpm, onset_frac * peak)
+        thr = onset_threshold(baseline, peak, onset_tol_rpm, onset_frac)
         onset_idx = None
         run = 0
         for i in range(n):
@@ -212,8 +227,8 @@ def analyze(rows, onset_tol_rpm=ONSET_TOL_RPM, onset_frac=ONSET_FRAC,
 
     # ---- 0 % anomaly flag ---------------------------------------------
     zero_flag = None
-    if s0 > 0.0 and abs(s0 - baseline) > max(onset_tol_rpm,
-                                             onset_frac * peak):
+    if s0 > 0.0 and abs(s0 - baseline) > onset_threshold(
+            baseline, peak, onset_tol_rpm, onset_frac):
         zero_flag = ("0%% reading (%.0f rpm) disagrees with the low-duty "
                      "plateau (~%.0f rpm): possible stale-latch artifact "
                      "or tach gating at zero duty" % (s0, baseline))

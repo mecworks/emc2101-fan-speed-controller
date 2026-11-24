@@ -5,6 +5,7 @@ effective duty = S/62 * 100 %), shaped to exercise each of the four
 characterization determinations plus the degenerate-input contracts.
 """
 import math
+import os
 import sys
 import unittest
 
@@ -13,7 +14,8 @@ sys.path.insert(0, "examples")
 from _fan_curve_math import (CSV_HEADER, NOISE_FLOOR_RPM_PER_PCT,
                              ONSET_FRAC, ONSET_TOL_RPM, PLATEAU_WINDOW_ROWS,
                              SUSTAIN_ROWS, analyze, effective_pct,
-                             format_csv_row, format_summary, median)
+                             format_csv_row, format_summary, median,
+                             onset_threshold)
 
 N_ROWS = 63          # S = 0..62
 STEP = 100.0 / 62.0  # percent per raw setting
@@ -56,6 +58,29 @@ class GridMathTestCase(unittest.TestCase):
         self.assertEqual(format_csv_row(1.6, 659.9, 658.8, 667.3),
                          "1.6,659.9,658.8,667.3")
         self.assertEqual(CSV_HEADER, "pct,rpm_settled,rpm_min,rpm_max")
+
+
+class OnsetThresholdTestCase(unittest.TestCase):
+    """The onset tolerance scales with the dynamic range (peak - floor),
+    not the absolute peak (UC15)."""
+
+    def test_fraction_scales_with_span_not_peak(self):
+        # SickleFlow-shaped numbers: floor 680, peak 2370 -> span 1690;
+        # 2 % of span = 33.8 beats the 10 rpm floor. Keyed to the peak,
+        # the same call would yield 680 + 47.4 = 727.4 instead.
+        self.assertAlmostEqual(onset_threshold(680.0, 2370.0), 713.8,
+                               places=6)
+
+    def test_absolute_floor_wins_for_small_range(self):
+        # span 50 -> 2 % = 1 rpm < 10 rpm floor
+        self.assertAlmostEqual(onset_threshold(600.0, 650.0), 610.0,
+                               places=6)
+
+    def test_custom_parameters(self):
+        # 5 % of span 900 = 45 < tol_rpm 50 -> the absolute floor wins
+        self.assertAlmostEqual(
+            onset_threshold(100.0, 1000.0, tol_rpm=50.0, frac=0.05),
+            150.0, places=6)
 
 
 class StoppingFanTestCase(unittest.TestCase):
@@ -114,10 +139,11 @@ class FloorFanTestCase(unittest.TestCase):
         self.assertIn("stale-latch", self.res["zero_flag"])
 
     def test_onset_in_expected_band(self):
-        # threshold = 660 + max(10, 0.02*2300=46) = 706 => pct > ~22.2
+        # threshold = ~662 + max(10, 0.02*(2300-662)=32.8) = ~694.8 =>
+        # pct > ~21.6; first sustained row is i=14 (22.6 %)
         self.assertIsNotNone(self.res["onset_pct"])
         self.assertGreater(self.res["onset_pct"], 20.0)
-        self.assertLess(self.res["onset_pct"], 26.0)
+        self.assertLess(self.res["onset_pct"], 24.0)
 
     def test_no_saturation_ceiling(self):
         self.assertIsNone(self.res["ceiling_pct"])
@@ -252,6 +278,63 @@ class DegenerateInputTestCase(unittest.TestCase):
         res = analyze(rows)
         self.assertFalse(res["turns_off"])
         self.assertAlmostEqual(res["peak_rpm"], 100.0 + N_ROWS - 1, places=6)
+
+
+# Golden regression artifact: the real U4 Pico W sweep (committed bench
+# data). Path is resolved relative to this file so the test works from any
+# CWD; skipped when the artifact is absent (e.g. a pruned checkout).
+LIVE_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "bench-data", "Cooler Master SickleFlow 92",
+                        "pico", "duty_curve_2026-11-24.csv")
+
+
+@unittest.skipUnless(os.path.exists(LIVE_CSV),
+                     "live sweep artifact not present (bench-data)")
+class LiveSweepRegressionTestCase(unittest.TestCase):
+    """Golden regression on the real SickleFlow 92 Pico W sweep (U4).
+
+    Pins the UC15 fix: the gentle initial climb (687 -> 719 -> 754 rpm)
+    must be detected as onset near 22.6 %, not buried by a peak-keyed
+    tolerance (which reported 24.2 % -- one grid step late).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rows = []
+        with open(LIVE_CSV) as f:
+            header = f.readline().strip()
+            if header != CSV_HEADER:
+                raise AssertionError("unexpected live CSV header: %r"
+                                     % header)
+            for line in f:
+                line = line.strip()
+                if line:
+                    cls.rows.append(tuple(float(v)
+                                          for v in line.split(",")))
+        cls.res = analyze(cls.rows)
+
+    def test_floor_fan_never_stops(self):
+        self.assertFalse(self.res["turns_off"])
+        self.assertAlmostEqual(self.res["floor_rpm"], 682.0, delta=5.0)
+
+    def test_onset_near_true_knee(self):
+        # true knee sits between 21.0 % (687 rpm, still floor noise) and
+        # 22.6 % (719 rpm, first decisive step); the detector reports the
+        # first sustained crossing row
+        self.assertIsNotNone(self.res["onset_pct"])
+        self.assertGreater(self.res["onset_pct"], 21.0)
+        self.assertLess(self.res["onset_pct"], 24.0)
+
+    def test_no_ceiling_and_no_zero_flag(self):
+        self.assertIsNone(self.res["ceiling_pct"])
+        self.assertIsNone(self.res["zero_flag"])
+
+    def test_linearity_measured_against_shifted_chord(self):
+        lin = self.res["linearity"]
+        self.assertIsNotNone(lin)
+        x0, y0, x1, y1 = lin["ref_line"]
+        self.assertAlmostEqual(x0, self.res["onset_pct"], places=6)
+        self.assertAlmostEqual(y1, 2367.4, places=1)
 
 
 class SummaryFormattingTestCase(unittest.TestCase):
