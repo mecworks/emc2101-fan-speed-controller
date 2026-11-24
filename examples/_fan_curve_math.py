@@ -292,7 +292,7 @@ def format_summary(res, fan_name=""):
 
     # Q4
     if res["ceiling_pct"] is None:
-        lines.append("4) Speed still increasing at 100 %% PWM (no "
+        lines.append("4) Speed still increasing at 100 % PWM (no "
                      "saturation observed).")
     else:
         lines.append("4) Speed plateaus above ~%.1f %% PWM (no further "

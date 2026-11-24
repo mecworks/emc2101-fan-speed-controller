@@ -346,6 +346,9 @@ class SummaryFormattingTestCase(unittest.TestCase):
         self.assertIn("stops", text)
         self.assertIn("starts turning", text)
         self.assertIn("still increasing at 100", text)
+        # the Q4 no-ceiling line is not %-formatted, so a doubled percent
+        # would print literally (regression guard)
+        self.assertNotIn("%%", text)
 
     def test_floor_fan_lines(self):
         res = analyze(make_rows(lambda pct, i: 660.0 + max(0.0, pct - 20.0) * 20.0))
