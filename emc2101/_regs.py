@@ -122,6 +122,7 @@ SU_DRIVE_BYPASS = 0x00
 SU_DRIVE_50 = 0x08
 SU_DRIVE_75 = 0x10
 SU_DRIVE_100 = 0x18
+SU_SPIN_TIME_POR = 0x07      # POR default SPIN_TIME encoding (3.2 s)
 
 # --- Averaging filter register (S6.23) ---------------------------------------
 FLT_LEVEL_MASK = 0x06        # FILTER[2:1]

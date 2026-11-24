@@ -46,6 +46,18 @@ class IdealityTestCase(unittest.TestCase):
         self.assertEqual(t.registers[REG_IDEALITY], 0x0C)
         self.assertIn(achieved, IDEALITY_FACTORS)
 
+    def test_set_exact_tie_prefers_lower_index(self):
+        # The midpoint of IDEALITY_FACTORS[4] (1.0001) and [5] (1.0014)
+        # is an EXACT float tie (verified: both distances compare equal),
+        # so the solver's strict-less-than scan must keep the lower index.
+        lo, hi = IDEALITY_FACTORS[4], IDEALITY_FACTORS[5]
+        mid = (lo + hi) / 2.0
+        self.assertEqual(abs(mid - lo), abs(hi - mid))
+        dev, t = make_dev({REG_IDEALITY: 0x12})
+        achieved = dev.set_ideality_factor(mid)
+        self.assertAlmostEqual(achieved, lo, places=9)
+        self.assertEqual(t.registers[REG_IDEALITY], 0x0C)
+
 
 class BetaTestCase(unittest.TestCase):
     def test_auto_detect_roundtrip_preserves_field(self):

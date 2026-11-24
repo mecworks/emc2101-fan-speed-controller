@@ -155,6 +155,19 @@ class LutIndexAccessTestCase(unittest.TestCase):
         dev.lut_set_index(3, 40, 50.0)     # S = round(50*62/100) = 31
         self.assertEqual(write_entries(t.log), [(0x56, 40), (0x57, 31)])
 
+    def test_set_index_single_prog_dance_in_lut_mode(self):
+        # PROG=0 with CLK_SEL=1: both bytes go out under ONE temporary
+        # PROG=1 (arm + restore = exactly two FAN_CFG writes), not one
+        # dance per byte.
+        dev, t = make_dev({REG_FAN_CFG: FCFG_CLK_SEL, REG_PWM_F: 0x1F})
+        dev.lut_set_index(3, 40, 50.0)
+        entries = write_entries(t.log)
+        cfg_writes = [val for r, val in entries if r == REG_FAN_CFG]
+        self.assertEqual(cfg_writes, [FCFG_CLK_SEL | FCFG_PROG,
+                                      FCFG_CLK_SEL])
+        self.assertEqual([e for e in entries if e[0] != REG_FAN_CFG],
+                         [(0x56, 40), (0x57, 31)])
+
     def test_set_index_range(self):
         dev, _ = make_dev({REG_FAN_CFG: FCFG_PROG, REG_PWM_F: 0x1F})
         with self.assertRaises(ValueError):

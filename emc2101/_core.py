@@ -57,6 +57,7 @@ from ._regs import (ADDR_FIXED, AMSK_DEFINED, AMSK_HIGH, AMSK_INT, AMSK_LOW,
                     ST_INT_HIGH, ST_TACH, ST_TCRIT, SU_DRIVE_100,
                     SU_DRIVE_50, SU_DRIVE_75, SU_DRIVE_BYPASS, SU_FAST_TACH,
                     SU_SPIN_DRIVE_MASK, SU_SPIN_TIME_MASK,
+                    SU_SPIN_TIME_POR,
                     ext_raw_to_temp, ext_temp_to_raw,
                     int_raw_to_temp, int_temp_to_raw, rpm_from_count,
                     setting_to_duty_pct, duty_pct_to_setting,
@@ -687,10 +688,9 @@ class EMC2101:
         pwm_f = self._t.read_byte(REG_PWM_F) & 0x1F
         t = int_temp_to_raw(temp_c)
         s = duty_pct_to_setting(duty_pct, pwm_f)
-        self._with_prog_writable(
-            lambda: self._t.write_byte(REG_LUT_BASE + 2 * index, t))
-        self._with_prog_writable(
-            lambda: self._t.write_byte(REG_LUT_BASE + 2 * index + 1, s))
+        encoded = [(REG_LUT_BASE + 2 * index, t),
+                   (REG_LUT_BASE + 2 * index + 1, s)]
+        self._with_prog_writable(lambda: self._write_lut_bytes(encoded))
 
     @property
     def hysteresis_c(self):
@@ -883,7 +883,7 @@ class EMC2101:
         reg = self._t.read_byte(REG_SPINUP)
         if value:
             if not (reg & SU_SPIN_TIME_MASK):
-                reg |= 0x07          # POR default: 3.2 s
+                reg |= SU_SPIN_TIME_POR   # POR default: 3.2 s
         else:
             reg &= ~SU_SPIN_TIME_MASK
         self._t.write_byte(REG_SPINUP, reg)
@@ -1157,7 +1157,7 @@ class EMC2101:
         cfg = self._t.read_byte(REG_CONFIG)
         self._t.write_byte(REG_CONFIG, cfg | CFG_ALT_TCH)
         su = self._t.read_byte(REG_SPINUP)
-        sane = SU_FAST_TACH | SU_DRIVE_100 | 0x07
+        sane = SU_FAST_TACH | SU_DRIVE_100 | SU_SPIN_TIME_POR
         if su != sane:
             self._t.write_byte(REG_SPINUP, sane)
 
