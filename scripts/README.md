@@ -50,3 +50,4 @@ not need hardware (coverage, lint, deploy helpers) belong in `tools/`.
 | Script | Purpose |
 |--------|---------|
 | `smoke_import.py` | M2 acceptance (RPi 3A+ leg): CPython import + smbus2 dependency check + adopted-handle construction without opening a bus (chip not required); run on the Pi after SCP-ing the package alongside it |
+| `bus_recovery.py` | Wedged-bus escape hatch: Philips-spec SDA release (9×SCL pulses + STOP) via sysfs GPIO, run as root with the i2c driver unloaded; adapted from the MAX31760 sibling project (D24 precedent) |
