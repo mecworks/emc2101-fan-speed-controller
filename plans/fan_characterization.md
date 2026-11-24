@@ -39,7 +39,7 @@ running that command yields `curve.png` and `curve.meta.json`.
 
 - [x] (2026-11-24) U0 Utility planning trail: `plans/` directory, this file, AGENTS.md pointer (commit e3c5541).
 - [x] (2026-11-24) U1 Analysis core: `examples/_fan_curve_math.py` + `tests/test_fan_curve_math.py` (31 new tests; all four gates green).
-- [ ] U2 Collector: `examples/fan_characterize.py`.
+- [x] (2026-11-24) U2 Collector: `examples/fan_characterize.py` (all four gates green; fake-device dry run of all three pre-flight paths passed — see Surprises).
 - [ ] U3 Renderer: `tools/render_curve.py`.
 - [ ] U4 Bench validation & docs: live runs (Pico W streamed, RPi native), PNGs verified, `examples/README.md` updated, gates green.
 
@@ -51,6 +51,14 @@ running that command yields `curve.png` and `curve.meta.json`.
   median of ~18 tach samples and cannot spike alone — so the heuristic was left as-is
   and the degenerate-input test asserts only the contractual guarantees (no exception,
   onset located, linearity unmeasurable) rather than the ceiling value.
+- (2026-11-24, U2) A throwaway host-side dry run of the collector's `main()` against a
+  stateful FakeTransport (scripted stdin, instant sleeps, simulated live/dead tach)
+  caught a real defect before bench time: the CSV header was collected for `--save`
+  but never emitted to the stdout stream, so remote captures would have produced a
+  header-less file. Fixed by printing the header at sweep start. The same harness then
+  verified all three pre-flight outcomes (test-path built-in, skip-path external with
+  sanity check, dead-tach abort after 3 attempts) end-to-end: correct rc, 63-row CSV
+  shape, restore PASS, zero register drift, no partial CSV on abort.
 
 ## Decision Log
 

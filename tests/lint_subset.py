@@ -36,6 +36,7 @@ SHARED = [
     "emc2101/mp.py",
     "emc2101/__init__.py",
     "examples/_fan_curve_math.py",
+    "examples/fan_characterize.py",
     "examples/pico_demo.py",
     "examples/esp32_demo.py",
     "examples/rpi_demo.py",
