@@ -1,0 +1,30 @@
+{
+  "fan": "Cooler Master SickleFlow 92",
+  "bench": "RPi 3A+ (SMBus bus 1)",
+  "date": "2026-11-24",
+  "pullup": "external",
+  "ppr": 2,
+  "grid": "duty grid: raw S=0..62 @ PWM_F=31 (~1.6 % steps)",
+  "source_csv": "C:\\Users\\mecwo\\Documents\\ChatboxAI Sandbox\\EMC2101_Fan_Speed_controller\\bench-data\\Cooler Master SickleFlow 92\\rpi\\duty_curve_2026-11-24.csv",
+  "analysis": {
+    "turns_off": false,
+    "floor_rpm": 681.6,
+    "onset_pct": 22.6,
+    "onset_rpm": 718.9,
+    "linearity": {
+      "max_dev_rpm": 11.861369509044152,
+      "max_dev_pct_of_span": 0.7168290027826285,
+      "at_pct": 58.1,
+      "rms_rpm": 4.710524721257647,
+      "ref_line": [
+        22.6,
+        718.9,
+        100.0,
+        2373.6
+      ]
+    },
+    "ceiling_pct": null,
+    "zero_flag": null,
+    "peak_rpm": 2373.6
+  }
+}

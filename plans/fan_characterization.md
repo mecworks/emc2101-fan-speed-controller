@@ -41,7 +41,7 @@ running that command yields `curve.png` and `curve.meta.json`.
 - [x] (2026-11-24) U1 Analysis core: `examples/_fan_curve_math.py` + `tests/test_fan_curve_math.py` (31 new tests; all four gates green).
 - [x] (2026-11-24) U2 Collector: `examples/fan_characterize.py` (all four gates green; fake-device dry run of all three pre-flight paths passed — see Surprises).
 - [x] (2026-11-24) U3 Renderer: `tools/render_curve.py` (commit b1ec101; verified on a synthetic floor-fan CSV shaped like the reference data: two-line title, measured curve, min-to-max chord from `linearity["ref_line"]`, onset marker, 0 % anomaly flag, max-dev annotation, metadata footer below the axes, meta.json sidecar; all four gates green).
-- [ ] U4 Bench validation & docs: live runs (Pico W streamed, RPi native), PNGs verified, `examples/README.md` updated, gates green.
+- [x] U4 Bench validation & docs: live runs (Pico W streamed, RPi native), PNGs verified, `examples/README.md` updated, gates green.
   - (2026-11-24) Started: branch tree synced to the RPi 3A+ bench (`~/fanchar`, smbus2
     present); liveness probe found **bus 1 empty** (no device at 0x4C, full i2cdetect
     scan clean) and no MCU USB serial adapters are attached to the dev PC (no COM16/
@@ -91,6 +91,20 @@ running that command yields `curve.png` and `curve.meta.json`.
     consistently (max dev +15 rpm @ 98 %, RMS 7 rpm). PNG and meta.json re-rendered
     from the unchanged CSV; a golden regression test on this very sweep pins the
     corrected behaviour.
+  - (2026-11-24) **RPi native leg COMPLETE** -- breakout connected to the RPi
+    3A+'s I2C bus 1 (marc@192.168.1.225); tree re-synced to ~/fanchar (tar over
+    ssh). Pre-flight probe confirmed the identity trio (0x16/0x5D/0x01) and a
+    LIVE tach at 100 % (2369.5 rpm -- the bench pull-up is wired into the Pi
+    circuit), byte-for-byte restore PASS. The full 63-level sweep then ran
+    non-interactively in the background (~6 min, RC=0): unlike mpremote, ssh
+    forwards host stdin fine, so answers were piped straight in and no
+    /char_answers.txt was needed. Artifacts in `bench-data/Cooler Master
+    SickleFlow 92/rpi/duty_curve_2026-11-24.{csv,png,meta.json,raw.txt}`. Four
+    answers agree with the Pico leg: never stops (~682 rpm floor), onset ~22.6 %
+    (UC15 fix confirmed on the second platform), max dev +12 rpm (0.7 % of span)
+    @ 58.1 % / RMS 5 rpm, no saturation (2373.6 rpm at 100 %); verdict pull-up =
+    external. U4 acceptance met: two real CSVs + two PNGs produced and reviewed,
+    README updated, all four gates green.
 
 ## Surprises & Discoveries
 
@@ -159,6 +173,16 @@ running that command yields `curve.png` and `curve.meta.json`.
   still wins when the span is narrow). Lesson: heuristic tolerances that scale
   with an ABSOLUTE quantity drift as the DUT changes; scale them with the
   quantity being measured.
+- (2026-11-24, U4) The RPi has no emc2101 installation and an empty PYTHONPATH:
+  the collector's documented native invocation (`python3 examples/
+  fan_characterize.py`) fails with ModuleNotFoundError because sys.path[0] is
+  examples/, not the repo root. The launcher exports PYTHONPATH=$HOME/fanchar;
+  since pyproject.toml exists, `pip install -e .` on the bench would be the
+  cleaner standing fix (noted, not acted on).
+- (2026-11-24, U4) A cosmetic wart escaped the unit tests: the Q4 no-ceiling
+  summary line carried a doubled percent ("100 %% PWM") because that branch is
+  the only one NOT %-formatted, so %% printed literally. Caught by eye in the
+  RPi run's stderr; fixed and pinned with assertNotIn("%%", text).
 
 ## Decision Log
 

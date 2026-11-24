@@ -1,0 +1,83 @@
+EMC2101 found: product 0x16, mfg 0x5d, rev 0x1
+snapshot: 40 registers captured
+Waiting 3 s for the fan to reach full speed...
+Is an external pull-up currently attached to the tach line? [y/N] Test the tach line now? [y/N] Driving the fan at 100 %; sensing the tach line...
+Tach live WITH the bench-installed pull-up (2376 rpm). Recorded: pull-up = external.
+Duty grid: PWM_F=31 -> 1.61 % steps (~5806.5 kHz base)
+Sweeping S=0..62 (63 levels x 5000 ms dwell)... Ctrl-C aborts safely.
+  level  0/62    0.0 %  settled   704.2 rpm
+  level  1/62    1.6 %  settled   678.1 rpm
+  level  2/62    3.2 %  settled   680.5 rpm
+  level  3/62    4.8 %  settled   679.2 rpm
+  level  4/62    6.5 %  settled   679.2 rpm
+  level  5/62    8.1 %  settled   676.4 rpm
+  level  6/62    9.7 %  settled   676.4 rpm
+  level  7/62   11.3 %  settled   678.0 rpm
+  level  8/62   12.9 %  settled   679.8 rpm
+  level  9/62   14.5 %  settled   681.6 rpm
+  level 10/62   16.1 %  settled   680.7 rpm
+  level 11/62   17.7 %  settled   678.8 rpm
+  level 12/62   19.4 %  settled   681.7 rpm
+  level 13/62   21.0 %  settled   691.7 rpm
+  level 14/62   22.6 %  settled   718.9 rpm
+  level 15/62   24.2 %  settled   752.0 rpm
+  level 16/62   25.8 %  settled   786.8 rpm
+  level 17/62   27.4 %  settled   819.8 rpm
+  level 18/62   29.0 %  settled   860.0 rpm
+  level 19/62   30.6 %  settled   896.9 rpm
+  level 20/62   32.3 %  settled   929.6 rpm
+  level 21/62   33.9 %  settled   963.1 rpm
+  level 22/62   35.5 %  settled   998.0 rpm
+  level 23/62   37.1 %  settled  1033.9 rpm
+  level 24/62   38.7 %  settled  1061.5 rpm
+  level 25/62   40.3 %  settled  1101.8 rpm
+  level 26/62   41.9 %  settled  1139.5 rpm
+  level 27/62   43.5 %  settled  1174.7 rpm
+  level 28/62   45.2 %  settled  1207.8 rpm
+  level 29/62   46.8 %  settled  1240.0 rpm
+  level 30/62   48.4 %  settled  1275.1 rpm
+  level 31/62   50.0 %  settled  1305.9 rpm
+  level 32/62   51.6 %  settled  1339.6 rpm
+  level 33/62   53.2 %  settled  1373.7 rpm
+  level 34/62   54.8 %  settled  1405.2 rpm
+  level 35/62   56.5 %  settled  1442.7 rpm
+  level 36/62   58.1 %  settled  1489.7 rpm
+  level 37/62   59.7 %  settled  1518.1 rpm
+  level 38/62   61.3 %  settled  1549.5 rpm
+  level 39/62   62.9 %  settled  1583.1 rpm
+  level 40/62   64.5 %  settled  1618.2 rpm
+  level 41/62   66.1 %  settled  1654.9 rpm
+  level 42/62   67.7 %  settled  1681.7 rpm
+  level 43/62   69.4 %  settled  1722.5 rpm
+  level 44/62   71.0 %  settled  1758.4 rpm
+  level 45/62   72.6 %  settled  1788.7 rpm
+  level 46/62   74.2 %  settled  1822.5 rpm
+  level 47/62   75.8 %  settled  1849.9 rpm
+  level 48/62   77.4 %  settled  1888.8 rpm
+  level 49/62   79.0 %  settled  1915.6 rpm
+  level 50/62   80.6 %  settled  1955.8 rpm
+  level 51/62   82.3 %  settled  1997.8 rpm
+  level 52/62   83.9 %  settled  2021.7 rpm
+  level 53/62   85.5 %  settled  2061.9 rpm
+  level 54/62   87.1 %  settled  2093.8 rpm
+  level 55/62   88.7 %  settled  2130.2 rpm
+  level 56/62   90.3 %  settled  2162.6 rpm
+  level 57/62   91.9 %  settled  2192.4 rpm
+  level 58/62   93.5 %  settled  2234.2 rpm
+  level 59/62   95.2 %  settled  2266.1 rpm
+  level 60/62   96.8 %  settled  2296.9 rpm
+  level 61/62   98.4 %  settled  2332.6 rpm
+  level 62/62  100.0 %  settled  2373.6 rpm
+
+Fan curve summary - Cooler Master SickleFlow 92
+-----------------------------------------------
+1) Fan NEVER STOPS: holds a ~682 rpm floor at 0 % drive.
+2) Speed begins rising above its ~682 rpm floor at ~22.6 % PWM.
+3) Linearity: max deviation +12 rpm (0.7 % of span) at 58.1 % duty; RMS 5 rpm vs the ideal linear curve.
+4) Speed still increasing at 100 %% PWM (no saturation observed).
+
+Save the CSV stream (CURVE.csv below) and render the PNG on any host with matplotlib:
+python3 tools/render_curve.py CURVE.csv --fan "Cooler Master SickleFlow 92" --bench "RPi 3A+ (SMBus bus 1)" --pullup external --ppr 2 --date 2026-11-24
+FAN CHARACTERIZATION: DONE
+[PASS] safety-net restore byte-for-byte (40 regs)
+RC=0
