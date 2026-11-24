@@ -28,7 +28,9 @@ from emc2101 import _regs as R
 # Built by plain concatenation, not os.path.join: MicroPython's os module
 # has no path submodule, and this example must run unchanged on all three
 # benches (the expanduser call is CPython-only by the ternary guard).
-BASE_DIR = os.path.expanduser("~") if sys.platform == "linux" else "/"
+# The prefix is "" on MicroPython so the result is the flash-root absolute
+# path "/<name>", byte-identical to what os.path.join("/", name) would give.
+PATH_PREFIX = os.path.expanduser("~") if sys.platform == "linux" else ""
 
 
 def build_device():
@@ -146,7 +148,7 @@ try:
            % rpm)
 
     # ----------------------------------------------- persistence round trip
-    smoke_path = BASE_DIR + "/emc2101_smoke.json"
+    smoke_path = PATH_PREFIX + "/emc2101_smoke.json"
     orig_sp = dev.scratchpad_get(0)
     orig_lh = dev.local_high_c
     path = dev.save_config(smoke_path)
