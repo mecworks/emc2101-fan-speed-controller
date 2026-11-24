@@ -7,7 +7,7 @@ actually does.
 
 ## Prerequisites
 
-- **Host (any OS):** Python ≥ 3.9 with `unittest` (stdlib). No package
+- **Host (any OS):** Python ≥ 3.10 with `unittest` (stdlib). No package
   installation is needed to run the test suite — tests run against mock
   transports.
 - **MCU workflows:** `pip install mpremote` (invoke as
