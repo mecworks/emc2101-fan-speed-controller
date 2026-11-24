@@ -54,6 +54,6 @@ Initial release of the cross-platform EMC2101 driver package.
 - **Tooling:** `tools/api_coverage.py` (public-member coverage gate),
   `tests/lint_subset.py` (MicroPython-subset lint gate),
   `tools/deploy_mp.py` (mpremote-based package deployer), mock-backed
-  unit suite (261 tests) with stateful fake transports.
+  unit suite (274 tests) with stateful fake transports.
 - **Documentation:** `docs/` (quickstart, API reference, wiring guide,
   persistence, operational notes), `CONTRIBUTING.md`, this changelog.
