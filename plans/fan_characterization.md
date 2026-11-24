@@ -40,8 +40,14 @@ running that command yields `curve.png` and `curve.meta.json`.
 - [x] (2026-11-24) U0 Utility planning trail: `plans/` directory, this file, AGENTS.md pointer (commit e3c5541).
 - [x] (2026-11-24) U1 Analysis core: `examples/_fan_curve_math.py` + `tests/test_fan_curve_math.py` (31 new tests; all four gates green).
 - [x] (2026-11-24) U2 Collector: `examples/fan_characterize.py` (all four gates green; fake-device dry run of all three pre-flight paths passed — see Surprises).
-- [ ] U3 Renderer: `tools/render_curve.py`.
+- [x] (2026-11-24) U3 Renderer: `tools/render_curve.py` (commit b1ec101; verified on a synthetic floor-fan CSV shaped like the reference data: two-line title, measured curve, min-to-max chord from `linearity["ref_line"]`, onset marker, 0 % anomaly flag, max-dev annotation, metadata footer below the axes, meta.json sidecar; all four gates green).
 - [ ] U4 Bench validation & docs: live runs (Pico W streamed, RPi native), PNGs verified, `examples/README.md` updated, gates green.
+  - (2026-11-24) Started: branch tree synced to the RPi 3A+ bench (`~/fanchar`, smbus2
+    present); liveness probe found **bus 1 empty** (no device at 0x4C, full i2cdetect
+    scan clean) and no MCU USB serial adapters are attached to the dev PC (no COM16/
+    COM7). **BLOCKED on bench loadout**: reconnect the EMC2101 breakout to the RPi's
+    I2C bus 1 (native leg, everything already staged at `~/fanchar`) and/or plug in
+    the Pico W / ESP32-S3 (remote-streamed leg).
 
 ## Surprises & Discoveries
 
