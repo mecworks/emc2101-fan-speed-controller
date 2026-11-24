@@ -72,6 +72,9 @@ the jumper before returning to PWM mode.
 ## Recommended bench loadout
 
 One 4-wire fan on the FAN output with its tach lead on the TACH/ALERT
-pin, and a 2N3906 PNP thermal diode on DP/DN (anode → DN, cathode → DP,
-per the datasheet's diode orientation). This exercises every channel:
+pin, and a 2N3906 PNP thermal diode on DP/DN (anode → DP, cathode → DN,
+per datasheet Table 2.1: DP is the "external diode positive (anode)"
+pin and DN the "external diode negative (cathode)" pin — for a
+diode-connected PNP that means emitter → DP, base+collector → DN).
+This exercises every channel:
 PWM out, tach in, external temperature, and (if bridged) ALERT out.

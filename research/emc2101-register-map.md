@@ -18,6 +18,7 @@ This document is the single reference for driver design; every entry cites the d
 | Revision (`FFh`) | `0x01` | §6.26 |
 | Supply | 3.0–3.6 V (3.3 V nominal); 5 V-tolerant I/O pins | Ch. 3 |
 | Power modes | Normal / Standby / Mixed (STANDBY + FAN_STANDBY bits) | §5.3 |
+| External diode pin orientation | DP = "external diode positive (**anode**) connection"; DN = "external diode negative (**cathode**) connection" ⇒ anode → DP, cathode → DN (a diode-connected PNP therefore goes emitter → DP, base+collector → DN). Verified against the datasheet text 2026-11-23 (M9/F-11: the wiring guide previously stated the reverse). | Ch. 2, Table 2.1 (Pin Description) |
 
 **Receive Byte semantics (§4.5):** reads the register at the *current* pointer without re-addressing —
 used for "consecutive reads of the same register". Combined with Adafruit's tested observation that

@@ -21,11 +21,12 @@ report = dev.load_config("/alt/path.json", strict=False)
   rename (`os.replace`, falling back to `os.rename`); otherwise it falls
   back to a plain overwrite. A crash mid-save therefore never leaves a
   half-written config behind (worst case: the previous file intact).
-- **Report** (returned by both): a dict with `written` (register/value
-  pairs written), `skipped` (reasons, e.g. TCRIT skip), `warnings`
-  (e.g. revision mismatch, unlock consumed), and — when `strict=True` —
-  `diff` (per-register expected-vs-actual mismatches found by the
-  post-apply read-back).
+- **Return values**: `save_config()` returns the effective path string.
+  `load_config()` returns a report dict with `applied` (always `True`
+  on return), `warnings` (e.g. revision mismatch, TCRIT restore
+  skipped), and `diff` (per-register expected-vs-actual mismatches
+  found by the post-apply read-back; empty when `strict=False`, which
+  skips the read-back entirely).
 
 ### Validation policy
 
@@ -33,12 +34,12 @@ report = dev.load_config("/alt/path.json", strict=False)
 
 | Condition | Outcome |
 |---|---|
-| Unparseable JSON / wrong shape / unknown schema version | `ConfigFormatError` or `ConfigValidationError` (both `ValueError` subclasses); zero register writes. |
-| Product-ID stamp ≠ device's FDh | `ValueError` raised before any register write (wrong profile for this part). |
+| Unparseable JSON / wrong shape / unknown schema version | `ConfigFormatError` (`ValueError` subclass); zero register writes. |
+| Product-ID stamp ≠ device's FDh | `ConfigValidationError` raised before any register write (wrong profile for this part). |
 | Revision stamp ≠ device's FFh | Warning appended to the report; apply proceeds. |
 | Field out of range / LUT malformed | `ConfigValidationError`; zero register writes. |
 | Bus failure mid-apply | `ConfigApplyError` (`OSError` subclass); partial state possible — re-run after fixing the bus. |
-| Strict read-back mismatch | `ValueError("post-apply verification failed: ...")` listing each mismatching register; use `strict=False` to accept the diff (it is still reported). |
+| Strict read-back mismatch | `ConfigApplyError` (`OSError` subclass) listing each mismatching register; use `strict=False` to accept the diff (it is still reported). |
 
 ### Apply ordering
 
@@ -52,13 +53,16 @@ The LUT pre-flight re-checks ordering before any bus traffic.
 TCRIT (19h) is locked until the one-time TCRITOVRD unlock, which is
 consumed by the first change and then requires a power cycle. On apply:
 
-- Stored TCRIT equals the current chip value → **skipped** (no unlock
-  consumed), noted in `skipped`.
-- Stored TCRIT differs from both 85 °C (the locked POR value) and the
-  current value → the unlock dance is attempted once; if the bit was
-  already consumed since save, the write fails loudly and the mismatch
-  surfaces in the strict diff (warning in `warnings`).
-- Everything else → written normally.
+- Stored TCRIT equals the current chip value → silently skipped (no
+  unlock consumed, no note).
+- Stored TCRIT is 85 °C (the locked POR value) but the chip holds
+  something else → the one-time unlock was consumed elsewhere; the
+  restore is skipped with a loud warning in `warnings` (a power cycle
+  is required to get back to 85 °C).
+- Anything else → the unlock dance is attempted: TCRITOVRD is armed if
+  not already set and the stored value is written. If the unlock had
+  already been consumed since save, the chip ignores the write and the
+  mismatch surfaces in the strict diff.
 
 Never rely on persistence to re-program TCRIT twice between power
 cycles — see [Operational notes](operational-notes.md#tcrit-lifecycle).
@@ -104,7 +108,7 @@ timestamp string), `device` (identity stamps as canonical lowercase
   "lut": {"hysteresis_c": 4,
           "entries": [{"temp_c": 127, "duty_pct": 100.0}, "... x8"]},
   "fan": {
-    "manual": false, "duty_pct": 0.0, "output_inverted": false,
+    "manual": true, "duty_pct": 0.0, "output_inverted": false,
     "clk_sel": false, "pwm_f": 23, "clk_ovr": false, "pwm_div": 1,
     "pwm_freq_hz": 7826.08695652174,
     "spin_up": {"enabled": true, "drive_pct": 100, "time_s": 3.2,

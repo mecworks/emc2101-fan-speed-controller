@@ -36,7 +36,7 @@ after the retry ladder raise `OSError`.
 | `local_high_c` (rw) | Internal high limit, 05h, 8-bit signed, 1 °C. Alarm when die temp exceeds it. |
 | `remote_high_c` (rw) | External high limit, 07h+13h, 0.125 °C steps. |
 | `remote_low_c` (rw) | External low limit, 08h+14h, 0.125 °C steps. |
-| `tcrit_c` (rw) | TCRIT critical limit, 19h, 8-bit signed. Trips the fan to full drive. **One-time unlock**: changing it arms the TCRITOVRD bit; further changes need a power cycle. The setter attempts the unlock dance only when needed and reports via the return value; see [Operational notes](operational-notes.md#tcrit-lifecycle). |
+| `tcrit_c` (rw) | TCRIT critical limit, 19h, 8-bit signed. Trips the fan to full drive. **One-time unlock**: changing it arms the TCRITOVRD bit; further changes need a power cycle. The setter is silent best-effort: writing the current value is a no-op that does not consume the unlock; otherwise it arms TCRITOVRD and writes. If the one-time unlock was already consumed since the last power cycle the write does not take effect — verify by reading back. See [Operational notes](operational-notes.md#tcrit-lifecycle). |
 | `tcrit_hysteresis_c` (rw) | 21h, 0..127 °C. Clear threshold = TCRIT − hysteresis. |
 
 ## Status, alerts & faults
@@ -160,12 +160,13 @@ Conversion-rate helpers: `CONV_RATES_PER_S`, `conv_rate_encode(rate)`,
 | Member | Description |
 |---|---|
 | `save_config(path=None)` | Snapshot the current chip configuration to a JSON file (schema v1). Effective path: argument, else `config_path`. Atomic write (temp file + rename where the port supports it). Returns the effective path. |
-| `load_config(path=None, *, strict=True)` | Apply a saved JSON configuration. Validates before any register write; refuses product-ID mismatches; warns on revision mismatch; ordered apply with the TCRIT special case; optional strict post-apply read-back diff (ON by default — raises `ValueError` listing mismatches). Returns the apply report dict. |
+| `load_config(path=None, *, strict=True)` | Apply a saved JSON configuration. Validates before any register write; refuses product-ID mismatches; warns on revision mismatch; ordered apply with the TCRIT special case; optional strict post-apply read-back diff (ON by default — raises `ConfigApplyError` listing mismatches). Returns the apply report dict. |
 | `config_path` | Attribute: the effective default path for this instance. |
 
 Exceptions: `ConfigFormatError` / `ConfigValidationError` (`ValueError`
-subclasses) for unreadable/invalid files; `ConfigApplyError` (`OSError`
-subclass) for bus failures mid-apply. Full semantics in
+subclasses) for unreadable/invalid files (raised before any register
+write); `ConfigApplyError` (`OSError` subclass) for a bus failure
+mid-apply or a non-empty strict read-back diff. Full semantics in
 [Persistence](persistence.md).
 
 ## Module-level helpers (fixed-point conversions)

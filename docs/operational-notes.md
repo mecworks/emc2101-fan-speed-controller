@@ -41,10 +41,10 @@ A5 — the driver conservatively assumes it stays set until power cycle).
 
 Driver behavior:
 
-- `tcrit_c` setter: no-op when the value equals the current one;
-  otherwise performs the unlock dance (set TCRITOVRD, write TCRIT) and
-  reports what happened. If the unlock was already consumed since the
-  last power cycle, the write does not take effect — verify by reading
+- `tcrit_c` setter: silent best-effort. No-op when the value equals the
+  current one (does not consume the unlock); otherwise arms TCRITOVRD
+  and writes. If the one-time unlock was already consumed since the
+  last power cycle the write does not take effect — verify by reading
   back.
 - Persistence: see [Persistence](persistence.md#tcrit-special-case) —
   applying a file never consumes the unlock unnecessarily.
@@ -74,9 +74,15 @@ trade-off consciously). Both roles need the receiver-side pull-up — see
 ## ARA general call
 
 The chip also answers the SMBus Alternate Response Address general call
-(ARA address `0x06`; on-wire `0x0C`/`0x0D`). Consequence observed on the
-bench (M1): a bus scan reports `0x0C` alongside the device address
-`0x4C`. Treat `0x0C` as part of the EMC2101's footprint, not a foreign
+(ARA address `0x06`; on-wire `0x0C`/`0x0D`). Bench observation (M1,
+Pico W leg): while the ARA conditions hold — interrupt mode configured
+AND the ALERT pin asserted (an unmasked alarm latched) — a bus scan
+reports `0x0C` alongside the device address `0x4C`; on a fresh,
+alarm-free chip (RPi 3A+ leg) the scan shows `0x4C` only. Presence of
+`0x0C` is therefore state-dependent, consistent with datasheet §4.6/
+§5.4.2 (the chip answers the ARA only when configured as interrupt and
+the pin is asserted); its absence does not indicate a fault. When
+present, treat `0x0C` as part of the EMC2101's footprint, not a foreign
 device. The exported `ARA_GENERAL_CALL` constant documents the address.
 
 ## Force-register testing technique
@@ -119,7 +125,7 @@ Error taxonomy:
 | Bus failure after retry ladder | `OSError` |
 | Diode open/short sentinels on external temp | `DiodeFaultError` (OSError subclass) |
 | Invalid/unparseable config file | `ConfigFormatError` / `ConfigValidationError` (ValueError subclasses) |
-| Bus failure mid-apply / strict read-back mismatch handling | `ConfigApplyError` (OSError subclass) / `ValueError` |
+| Bus failure mid-apply, or strict read-back mismatch | `ConfigApplyError` (OSError subclass) |
 
 ## Reset
 
