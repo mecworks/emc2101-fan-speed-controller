@@ -37,9 +37,13 @@ from emc2101._core import (ALERT_MODE_COMPARATOR, ALERT_MODE_INTERRUPT,
 from emc2101._tables import IDEALITY_FACTORS, ideality_factor
 
 # Persistence paths: MicroPython flash root vs. a writable host dir.
+# Paths are built by plain concatenation, not os.path.join: MicroPython's
+# os module has no path submodule, and this example must run unchanged on
+# all three benches (the expanduser call below is CPython-only by the
+# ternary guard and is never evaluated on MicroPython).
 BASE_DIR = os.path.expanduser("~") if sys.platform == "linux" else "/"
-FLAG_FILE = os.path.join(BASE_DIR, "emc2101_e2e_coldboot.flag")
-PROFILE_FILE = os.path.join(BASE_DIR, "emc2101_e2e_profile.json")
+FLAG_FILE = BASE_DIR + "/emc2101_e2e_coldboot.flag"
+PROFILE_FILE = BASE_DIR + "/emc2101_e2e_profile.json"
 
 
 def _exists(path):
@@ -448,7 +452,7 @@ def sec_lifecycle():
 
 # ------------------------------------------------------------------ S9
 def sec_persistence():
-    smoke_path = os.path.join(BASE_DIR, "emc2101_e2e_smoke.json")
+    smoke_path = BASE_DIR + "/emc2101_e2e_smoke.json"
     orig_sp = dev.scratchpad_get(0)
     orig_lh = dev.local_high_c
     path = dev.save_config(smoke_path)
@@ -461,10 +465,10 @@ def sec_persistence():
            "scratchpad restored by load (%#x)" % dev.scratchpad_get(0))
     expect(dev.local_high_c == orig_lh,
            "local high limit restored by load (%.0f C)" % dev.local_high_c)
-    missing = os.path.join(BASE_DIR, "emc2101_e2e_missing_xyz.json")
+    missing = BASE_DIR + "/emc2101_e2e_missing_xyz.json"
     expect_raises(OSError, lambda: dev.load_config(missing),
                   "explicit load of a missing file raises OSError")
-    corrupt_path = os.path.join(BASE_DIR, "emc2101_e2e_corrupt.json")
+    corrupt_path = BASE_DIR + "/emc2101_e2e_corrupt.json"
     f = open(corrupt_path, "w")
     f.write("{ this is not json ]]")
     f.close()
@@ -486,7 +490,7 @@ def sec_persistence():
         # Approximate the MCU cold boot: stage a distinctive profile,
         # clobber the live chip, then prove the fresh instance's
         # constructor auto-load restores the profiled values.
-        cb_path = os.path.join(BASE_DIR, "emc2101_e2e_cb.json")
+        cb_path = BASE_DIR + "/emc2101_e2e_cb.json"
         orig_lh = dev.local_high_c
         dev.local_high_c = 65
         dev.scratchpad_set(0, 0xAB)
