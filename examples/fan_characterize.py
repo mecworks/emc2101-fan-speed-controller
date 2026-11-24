@@ -104,18 +104,47 @@ def detect_bench():
     return "MicroPython board (%s)" % m
 
 
+# --------------------------------------------------------------------------
+# Non-interactive answers (UC12)
+# --------------------------------------------------------------------------
+# mpremote does not forward host stdin to the device when the host stdin
+# is redirected (a piped answer file is never delivered), so input() would
+# block forever on a remote run. When ANSWER_FILE exists on the device,
+# answers are popped from it instead of stdin; once exhausted (or when the
+# file is absent and stdin is closed) every prompt falls back to its
+# default, which keeps every pre-flight path terminating.
+ANSWER_FILE = "/char_answers.txt"
+
+_ANSWERS = None
+
+
+def load_answers(path=ANSWER_FILE):
+    """Return the answer list from the device file, or None if absent."""
+    try:
+        with open(path) as f:
+            lines = [ln.rstrip("\r\n") for ln in f.readlines()]
+    except (OSError, IOError):
+        return None
+    eprint("non-interactive: %d answers from %s" % (len(lines), path))
+    return lines
+
+
 def ask(prompt, default=""):
-    """Prompt on stderr; read the answer from stdin. Closed stdin (EOF)
-    falls back to the default so fully-flagged non-interactive runs work."""
+    """Prompt on stderr; read the answer from the answer file when loaded,
+    else from stdin. Exhausted answers / closed stdin (EOF) fall back to
+    the default so non-interactive runs always terminate."""
     sys.stderr.write(prompt)
     try:
         sys.stderr.flush()
     except AttributeError:
         pass
-    try:
-        line = input()
-    except EOFError:
-        line = ""
+    if _ANSWERS is not None:
+        line = _ANSWERS.pop(0) if _ANSWERS else ""
+    else:
+        try:
+            line = input()
+        except EOFError:
+            line = ""
     line = line.strip()
     return line if line else default
 
@@ -252,7 +281,9 @@ def take_snapshot(dev):
         time.sleep(0.1)   # D36: let the fan-control read-out settle
     snap = {}
     for addr in SNAP:
-        snap[addr] = dev.read_reg(addr)
+        # Store the ORIGINAL FAN_CFG (not the PROG-toggled read-back) so
+        # restore leaves the chip in the exact mode it started in.
+        snap[addr] = fc_pre if addr == R.REG_FAN_CFG else dev.read_reg(addr)
     if not (fc_pre & R.FCFG_PROG):
         dev.write_reg(R.REG_FAN_CFG, bytes([fc_pre]))
     eprint("snapshot: %d registers captured" % len(snap))
@@ -350,6 +381,8 @@ def main(argv):
     rc = 0
     csv_lines = [CSV_HEADER]
     try:
+        global _ANSWERS
+        _ANSWERS = load_answers()
         # ------------------------------------------------------ metadata
         bench_default = detect_bench()
         fan_name = opts["name"] or ask("Fan name/model (metadata): ",

@@ -48,6 +48,19 @@ running that command yields `curve.png` and `curve.meta.json`.
     COM7). **BLOCKED on bench loadout**: reconnect the EMC2101 breakout to the RPi's
     I2C bus 1 (native leg, everything already staged at `~/fanchar`) and/or plug in
     the Pico W / ESP32-S3 (remote-streamed leg).
+  - (2026-11-24) U4 resumed, Pico W leg (user reconnected the Pico @ COM16): package
+    redeployed via `tools/deploy_mp.py` (8 files OK), `_fan_curve_math.py` pushed to
+    the device root via the exec/base64 workaround (`fs cp` to root FS fails with
+    Permission denied on mpremote 1.29.0), identity trio verified live
+    (0x16/0x5D/0x01). Three launch attempts then exposed the mpremote remote-run
+    limitations recorded in Surprises (piped stdin never delivered -> silent input()
+    hang; post-script CLI args not forwarded; device stderr merged into the host
+    stdout capture). Each hung run was killed and the chip registers read back to
+    confirm the hang preceded any register mutation (bench state O preserved intact).
+    Fix landed as UC12 (device-local answer file) plus a snapshot-fidelity fix for
+    FAN_CFG; all four gates green and the throwaway dry-run harness reports ALL PASS
+    (termination, byte-for-byte restore, CSV shape) on all three pre-flight outcomes
+    and the dead-tach abort. Live sweep pending.
 
 ## Surprises & Discoveries
 
@@ -65,6 +78,25 @@ running that command yields `curve.png` and `curve.meta.json`.
   verified all three pre-flight outcomes (test-path built-in, skip-path external with
   sanity check, dead-tach abort after 3 attempts) end-to-end: correct rc, 63-row CSV
   shape, restore PASS, zero register drift, no partial CSV on abort.
+- (2026-11-24, U4) mpremote 1.29.0 remote-run reality check, learned the hard way
+  (three hung launches, each diagnosed by killing the process and reading the chip
+  registers to prove no mutation had occurred): (1) host stdin redirected from a file
+  is NOT pumped to the device -- `input()` blocks forever instead of raising
+  EOFError, so piped answer files never work and every prompt needs a non-stdin
+  source; (2) `run <script> <extras>` parses the extras as CHAINED MPREMOTE COMMANDS,
+  not script argv -- the collector's CLI flags are unreachable on remote runs;
+  (3) the MicroPython console is a single UART stream, so mpremote relays the
+  device's stderr (prompts/progress/summary) into the HOST STDOUT alongside the CSV
+  -- a remote capture must be filtered down to the CSV-shaped lines; (4) `fsync`
+  (cited in the collector docstring) does not exist in this mpremote version, and
+  `fs cp` to the root FS fails with Permission denied (the same bug `deploy_mp.py`
+  works around), while `run`'s own script upload works fine.
+- (2026-11-24, U4) The UC12 dry-run harness (fake device, seeded registers mirroring
+  the bench's resting state) caught a real restore-fidelity defect: the snapshot
+  stored FAN_CFG as read during the temporary PROG=1 window (D35 quirk handling), so
+  a chip starting in auto/LUT mode would have been restored into manual program
+  mode. Fixed by storing the original pre-toggle value; the harness now asserts
+  byte-for-byte drift-free restore from both PROG=0 and PROG=1 seeds.
 
 ## Decision Log
 
@@ -158,6 +190,20 @@ Date/Author: 2026-11-24, agent.
   analysis result in U3), so the chart always shows exactly the line the
   deviations were measured against.
 Date/Author: 2026-11-24, agent.
+- Decision: UC12 — non-interactive remote runs read prompt answers from a
+  device-local file `/char_answers.txt` (one line per prompt, in order: fan
+  name, pulses/rev, bench label, tach-test y/n) when present; an absent file
+  falls back to stdin, and exhausted or closed input falls back to the prompt
+  defaults, so every pre-flight path terminates.
+Rationale: mpremote 1.29.0 neither forwards redirected host stdin to the
+  device (input() blocks forever) nor passes post-script arguments to `run`
+  (extras parse as chained mpremote commands), so neither piped answers nor
+  CLI flags can drive a remote run; a device-local file is the only robust
+  channel and degrades safely (missing file -> defaults -> skip path with its
+  silent 100 % sanity check). Alternatives rejected: host-side PTY wrappers
+  (fragile on Windows) and mandating interactive terminal operation (defeats
+  unattended capture).
+Date/Author: 2026-11-24, agent (forced by bench evidence).
 
 ## Outcomes & Retrospective
 
