@@ -15,7 +15,8 @@ Remote runs (Pico W / ESP32-S3 via mpremote 1.29.0), verified procedure:
        technique from tools/deploy_mp.py (mpremote's fs cp fails on the
        root FS; `run`'s own script upload works fine).
     2. Stage the answer file /char_answers.txt on the device (one line per
-       prompt: fan name, pulses/rev, bench label, tach-test y/n).
+       prompt: fan name, pulses/rev, bench label, pull-up-attached y/n,
+       tach-test y/n).
     3. Capture:  python -u -m mpremote connect port:COM16 \
                    run examples/fan_characterize.py > curve_raw.txt
        The MicroPython console is a single stream, so the capture mixes the
@@ -141,8 +142,12 @@ ANSWER_FILE = "/char_answers.txt"
 _ANSWERS = None
 
 
-def load_answers(path=ANSWER_FILE):
-    """Return the answer list from the device file, or None if absent."""
+def load_answers(path=None):
+    """Return the answer list from the device file, or None if absent.
+    The path resolves at CALL time (a def-time default would freeze the
+    constant and defeat relocation/monkeypatching)."""
+    if path is None:
+        path = ANSWER_FILE
     try:
         with open(path) as f:
             lines = [ln.rstrip("\r\n") for ln in f.readlines()]
@@ -240,7 +245,14 @@ def _attach_pullup_prompt(attempt):
 
 def resolve_pullup(dev, ppr):
     """Establish the fan's pull-up requirement. Returns 'built-in' or
-    'external'; raises Aborted if the line stays dead after retries."""
+    'external'; raises Aborted if the line stays dead after retries.
+
+    The live/dead sense alone cannot say WHERE a working pull-up lives --
+    a bench-installed resistor makes the line look built-in -- so the
+    current wiring state is asked explicitly first (UC13); the verdict
+    records the fan's requirement as seen under that wiring."""
+    attached = ask_yn("Is an external pull-up currently attached to the "
+                      "tach line?")
     if not ask_yn("Test the tach line now?", default_yes=False):
         needs = ask_yn("Does this fan require an external pull-up on the "
                        "tach line?")
@@ -255,10 +267,14 @@ def resolve_pullup(dev, ppr):
                "recorded configuration.")
         if not ask_yn("Jump into the tach-line test now?", default_yes=True):
             raise Aborted("tach line dead; user declined the test path")
-    # Test path: fan connected with NO pull-up on the tach line.
+    # Test path: sense the line as wired right now.
     eprint("Driving the fan at 100 %; sensing the tach line...")
     med = _probe_live(dev, ppr)
     if med > 0.0:
+        if attached:
+            eprint("Tach live WITH the bench-installed pull-up (%.0f rpm). "
+                   "Recorded: pull-up = external." % med)
+            return "external"
         eprint("Tach live WITHOUT a pull-up (%.0f rpm): the fan provides "
                "its own. Recorded: pull-up = built-in." % med)
         return "built-in"

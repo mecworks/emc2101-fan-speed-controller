@@ -2,10 +2,10 @@
   "fan": "Cooler Master SickleFlow 92",
   "bench": "Pico W (COM16)",
   "date": "2026-11-24",
-  "pullup": "built-in",
+  "pullup": "external",
   "ppr": 2,
   "grid": "duty grid: raw S=0..62 @ PWM_F=31 (~1.6 % steps)",
-  "source_csv": "C:\\Users\\mecwo\\Documents\\ChatboxAI Sandbox\\EMC2101_Fan_Speed_controller\\curve_pico.csv",
+  "source_csv": "C:\\Users\\mecwo\\Documents\\ChatboxAI Sandbox\\EMC2101_Fan_Speed_controller\\bench-data\\Cooler Master SickleFlow 92\\pico\\duty_curve_2026-11-24.csv",
   "analysis": {
     "turns_off": false,
     "floor_rpm": 682.2,

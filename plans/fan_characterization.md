@@ -62,18 +62,25 @@ running that command yields `curve.png` and `curve.meta.json`.
     (termination, byte-for-byte restore, CSV shape) on all three pre-flight outcomes
     and the dead-tach abort. Live sweep pending.
   - (2026-11-24) **Pico W leg COMPLETE** — live run captured end-to-end (artifacts in
-    `bench-data/`: `curve_pico.{csv,png,meta.json,raw.txt}`). Tach pre-flight test path
-    verified on real hardware: live at 100 % WITHOUT a pull-up (2382 rpm) → recorded
-    built-in. Full 63-level sweep in ~5.5 min; header + 63 rows extracted clean from
-    the merged capture; `[PASS] safety-net restore byte-for-byte (40 regs)`. Four
-    answers: fan never stops (~682 rpm floor), onset ~24.2 %, max deviation +16 rpm
-    (1.0 % of span) / RMS 6 rpm vs the ideal line, no saturation at 100 %. Rendered
-    `curve_pico.png` matches the reference style (chord 754@24% -> 2367@100%, onset
-    marker, metadata footer). The 0 % stale-latch leaked only into rpm_max (1738);
-    the discard window held the settled value (708.8), so no anomaly flag fired —
-    correct per contract. Two late MicroPython gaps found on the live bench and fixed
-    (no-flush stdout under mpremote, absent time.strftime); harness extended to cover
-    both. RPi native leg still pending bench loadout (breakout not yet on bus 1).
+    `bench-data/Cooler Master SickleFlow 92/pico/`: `duty_curve_2026-11-24.{csv,png,
+    meta.json,raw.txt}`, laid out per-DUT/per-platform per the bench-data convention).
+    Tach pre-flight test path verified on real hardware: live at 100 % (2382 rpm)
+    **with the bench-installed external pull-up** → recorded `external` (this fan has
+    no built-in pull-up; the ~10 kOhm resistor is permanently on the bench
+    breadboard). The first run's "built-in" verdict was a mislabel caused by the
+    old infer-from-alive logic and was corrected (UC13): the collector now asks the
+    wiring state explicitly, and the PNG/meta.json were re-rendered with
+    `--pullup external`. Full 63-level sweep in ~5.5 min; header + 63 rows extracted
+    clean from the merged capture; `[PASS] safety-net restore byte-for-byte (40
+    regs)`. Four answers: fan never stops (~682 rpm floor), onset ~24.2 %, max
+    deviation +16 rpm (1.0 % of span) / RMS 6 rpm vs the ideal line, no saturation
+    at 100 %. Rendered curve matches the reference style (chord 754@24% ->
+    2367@100%, onset marker, metadata footer). The 0 % stale-latch leaked only into
+    rpm_max (1738); the discard window held the settled value (708.8), so no anomaly
+    flag fired — correct per contract. Late MicroPython gaps found on the live bench
+    and fixed (no-flush stdout under mpremote, absent time.strftime); harness
+    extended to cover both. RPi native leg still pending bench loadout (breakout not
+    yet on bus 1).
 
 ## Surprises & Discoveries
 
@@ -119,6 +126,18 @@ running that command yields `curve.png` and `curve.meta.json`.
   guarded with try/except AttributeError (flush_stdout() helper; date falls back to
   "unknown" with an explicit --date at render time), and the dry-run harness
   simulates a no-flush stdout and a broken strftime so these stay covered.
+- (2026-11-24, U4) A bench-installed pull-up masqueraded as a built-in one: the
+  SickleFlow 92 has NO internal tach pull-up (known since the MAX31760 driver
+  build; the ~10 kOhm resistor is permanently wired on the bench breadboard), so
+  the test path's "live without attaching a pull-up during the test => built-in"
+  inference produced a false verdict in the first live run. A live/dead sense
+  cannot locate WHERE a working pull-up lives; UC13 asks the wiring state
+  explicitly before the test. Related find: the harness's new verdict assertion
+  exposed a latent defect — load_answers' def-time default argument
+  (path=ANSWER_FILE) froze the constant, so overriding fc.ANSWER_FILE had no
+  effect and every scenario silently ran on all-defaults (scenario A's "built-in"
+  pass was actually the skip-path default). Fixed by resolving the path at call
+  time; the harness now asserts the recorded verdict string from stderr.
 
 ## Decision Log
 
@@ -226,6 +245,20 @@ Rationale: mpremote 1.29.0 neither forwards redirected host stdin to the
   (fragile on Windows) and mandating interactive terminal operation (defeats
   unattended capture).
 Date/Author: 2026-11-24, agent (forced by bench evidence).
+- Decision: UC13 — the collector asks "Is an external pull-up currently attached
+  to the tach line?" BEFORE the tach test, deterministically fourth in prompt
+  order (after the bench label, before the test-now question) so the answer-file
+  order stays stable for non-interactive runs. A live line during the test then
+  records 'external' when a pull-up is attached and 'built-in' only when none is.
+Rationale: the SickleFlow 92 requires an external pull-up (established during
+the MAX31760 driver build; the resistor is permanently installed on the bench
+breadboard), and the first live run showed the old inference ("live without
+attaching a pull-up during the test => built-in") labels the BENCH WIRING, not
+the fan — a bench-installed resistor makes any fan look built-in. Alternatives
+rejected: inferring from the breakout's pull-up jumper state (not readable over
+I2C) and manually correcting metadata after the fact (leaves the tooling free to
+repeat the error on the next fan).
+Date/Author: 2026-11-24, agent (forced by user correction).
 
 ## Outcomes & Retrospective
 
