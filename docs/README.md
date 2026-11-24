@@ -12,6 +12,7 @@ Raspberry Pi 3A+. The chip address is fixed at `0x4C`.
 | [Wiring guide](wiring.md) | STEMMA QT/Qwiic and raw I²C connections, per-platform pin tables, pull-up rules, DAC-mode caveat |
 | [Persistence](persistence.md) | JSON schema v1, `save_config`/`load_config`, auto-load semantics, strict read-back, TCRIT interaction |
 | [Operational notes](operational-notes.md) | Cold-boot window, TCRIT lifecycle, ALERT/TACH trade-offs, ARA, force-register testing, SMBus TIMEOUT, retry ladder |
+| [Fan curve characterization](fan-characterization.md) | Collector + renderer workflow: tach pull-up pre-flight, raw-grid sweep, CSV/PNG/meta.json artifacts, interpreting the four answers |
 
 Ground rules that apply to every document:
 

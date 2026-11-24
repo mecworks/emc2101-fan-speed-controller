@@ -105,6 +105,13 @@ running that command yields `curve.png` and `curve.meta.json`.
     @ 58.1 % / RMS 5 rpm, no saturation (2373.6 rpm at 100 %); verdict pull-up =
     external. U4 acceptance met: two real CSVs + two PNGs produced and reviewed,
     README updated, all four gates green.
+  - (2026-11-24) End-user documentation shipped: `docs/fan-characterization.md`
+    (prerequisites, prompt/flag reference, verified remote-mpremote and native-RPi
+    procedures, artifact formats, interpretation guide with worked example), added
+    to the `docs/README.md` index; the RPi run recorded in the bench-data Runs
+    table. Scope decisions per user: the ESP32-S3 characterization leg is skipped
+    (two-platform agreement is sufficient evidence for this utility) and packaging
+    work is deferred to another day (UC16).
 
 ## Surprises & Discoveries
 
@@ -330,6 +337,19 @@ linearity statistics re-anchor automatically (they consume
 `linearity["ref_line"]`), so chart and text summary stay consistent; a golden
 regression test on the committed live sweep pins the corrected behaviour.
 Date/Author: 2026-11-24, agent (forced by user correction).
+- Decision: UC16 -- end-user documentation for the utility lives at
+  `docs/fan-characterization.md`; the ESP32-S3 characterization leg is skipped;
+  packaging/installation work is deferred out of scope for this utility.
+Rationale: the collector is an end-user-shippable script (examples/ bucket,
+UC3), so its how-to belongs in the shipped-documentation genre alongside the
+quickstart/wiring/persistence pages rather than in plans/ or examples/README.md
+(which keeps its one-line-per-script summary role); the doc cross-links both.
+The ESP32-S3 leg was declined by the user after the Pico W and RPi legs agreed
+within noise on every determination -- a third platform would add little
+signal for this utility (the driver itself already has three-bench E2E
+coverage). Packaging (installable distribution, wheel, etc.) is explicitly
+another day's work per the user and is not part of this ExecPlan.
+Date/Author: 2026-11-24, user + agent.
 
 ## Outcomes & Retrospective
 
@@ -481,3 +501,7 @@ Runtime note: sweep ≈ 63 × 5 s ≈ 5.3 min plus pre-flight.
   past the visible knee on the live SickleFlow 92 chart; `onset_threshold()` helper
   added, PNG/meta.json re-rendered from the unchanged CSV, golden regression test
   added. UC14 (per-DUT bench-data layout) retroactively logged.
+- 2026-11-24: UC16 -- end-user documentation (`docs/fan-characterization.md`) added
+  and indexed; ESP32-S3 characterization leg skipped and packaging deferred per user
+  (both recorded as scope decisions). Cosmetic %% fix in the Q4 summary line landed
+  in the same window.
