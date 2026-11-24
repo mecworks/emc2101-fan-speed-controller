@@ -479,13 +479,21 @@ def sec_persistence():
             pass
     # Cold-boot-with-profile scenario.
     if sys.platform == "linux":
+        # Approximate the MCU cold boot: stage a distinctive profile,
+        # clobber the live chip, then prove the fresh instance's
+        # constructor auto-load restores the profiled values.
         cb_path = os.path.join(BASE_DIR, "emc2101_e2e_cb.json")
+        orig_lh = dev.local_high_c
+        dev.local_high_c = 65
+        dev.scratchpad_set(0, 0xAB)
         dev.save_config(cb_path)
-        dev.scratchpad_set(0, dev.scratchpad_get(0) ^ 0xFF)
+        dev.local_high_c = orig_lh      # clobber domain 1
+        dev.scratchpad_set(0, 0x54)     # clobber domain 2 (distinct)
         dev2 = build_device(config_file=cb_path)
-        expect(dev2.scratchpad_get(0) == dev.scratchpad_get(0) ^ 0xFF,
-               "fresh instance auto-loaded the profile (approximation: no "
-               "board power-cycle possible from the host)")
+        expect(dev2.local_high_c == 65,
+               "cold boot: constructor auto-load applied local high (65 C)")
+        expect(dev2.scratchpad_get(0) == 0xAB,
+               "cold boot: constructor auto-load applied scratchpad 0 (0xAB)")
         dev2.close()
         try:
             os.remove(cb_path)
