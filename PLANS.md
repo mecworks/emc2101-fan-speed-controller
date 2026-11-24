@@ -68,6 +68,7 @@ published as the public GitHub repository `emc2101-fan-speed-controller`.
 - [x] (2026-11-23) Pre-M10 validation — ESP32-S3 leg COMPLETE (bench rotated by user; package redeployed to /lib/emc2101 via tools/deploy_mp.py --port COM7). hw_smoke_test.py PASS 18/18 (identity trio exact, local 23.0 °C / remote 28.000 °C, duty grid raw 0/12/23/34/46 monotonic, settled 2117 RPM, save_config wrote /emc2101_smoke.json single-slash, strict load clean, safety-net restore 40 regs). e2e_hardware_test.py full phase A→B cycle PASS: phase B verified the constructor cold-boot auto-load restored all three staged profile values (lh 65 °C, sp 0xAB, LUT entry 0 @ 30 °C) after machine.reset(), then ran the full eleven-section matrix (E2E HARDWARE MATRIX: PASS; safety net repaired 3 drifted registers). Operational note: one phase-A run hung in the known post-reset mpremote follow loop on COM7 (host timeout at 120 s; staging survived the reset, verified by fs ls); the next phase-A run completed cleanly with exit 0 — both behaviors are the documented COM7 pitfall, handled by fresh short sessions per operation. Post-run flash state clean (no test artifacts; probe_diag.py is the pre-existing D37 diagnostic). ALL THREE PLATFORMS VALIDATED ON THE FINAL TREE: RPi 3A+ (CPython facade), Pico W (MicroPython rp2), ESP32-S3 (MicroPython esp32) — smoke + E2E each, including live persistence round trips and cold-boot auto-load on every bench. Pending: user go-ahead for M10 push.
 - [x] (2026-11-23) Pre-M10 publication prep (user instruction): the published history credits the human author only — no AI-agent co-authorship. Stripped the `Co-authored-by: Chatbox` trailer from all 41 affected commit messages via `git filter-branch --msg-filter` (full 47-commit history preserved; author, committer, and dates intact; sole author Marc Christensen). Remapped every SHA citation to its post-rewrite counterpart so evidence pointers resolve in the published history: PLANS.md 54 refs, CODE_REVIEW_0.1.0.md 8 refs (mechanical substitution, byte-safe UTF-8; verified zero leftovers). AGENTS.md commit convention amended to forbid co-author trailers going forward (D41).
 - [x] M10 GitHub publication: create public repo, push full history, verify.
+- [x] (2026-11-23) M10 GATED — pushed and verified. Full 48-commit D41 trailer-stripped history pushed to https://github.com/mecworks/emc2101-fan-speed-controller (main); `git ls-remote origin main` == local HEAD 44877dd at push time; remote cross-checked via the GitHub API (48 commits, sole author Marc Christensen <mecworks@gmail.com>, zero co-author trailers). Live-page acceptance items confirmed: README renders, LGPL-2.1-or-later license detected, research/ present, reference/ absent (gitignored), commit count 48. Auth detail: git smart-HTTP rejects Bearer tokens (Basic only) — the push used an ephemeral `http.extraHeader` Basic credential read from the user-scope environment at push time with the credential helper disabled; nothing persisted to config, files, or the remote URL. The closing verification commit (this entry + README status refresh) supersedes 44877dd as the published HEAD.
 
 ## Surprises & Discoveries
 
@@ -671,8 +672,9 @@ local history carries everything). Add the remote
 with full history. Verify: the repository page renders the README and detects the LGPL-2.1
 license; the tree contains `research/` (all seven documents) and the full source tree;
 `reference/` is absent (gitignored); the latest commit matches local HEAD. Commit messages
-throughout the project use imperative subjects describing the change; commits made by the
-Chatbox agent carry the trailer `Co-authored-by: Chatbox <chatbox@chatboxai.com>`.
+throughout the project use imperative subjects describing the change; per D41, commits
+carry no co-author trailers — the human author alone is credited in the published
+history.
 Acceptance: the public URL is reachable and shows the complete tree; `git ls-remote origin`
 matches local refs.
 
@@ -815,18 +817,22 @@ M9 — Address M8 code-review findings:
     # expect: every finding closed; gates green on the final tree; findings-log
     # bullet in Artifacts populated with per-item closure references.
 
-M10 — GitHub publication:
+M10 — GitHub publication (executed 2026-11-23):
 
-    # resolve login via GitHub API (get_me); then create the public repo
-    # emc2101-fan-speed-controller (no auto-init) via the GitHub MCP or:
-    gh repo create emc2101-fan-speed-controller --public
-    git remote add origin https://github.com/<login>/emc2101-fan-speed-controller.git
-    git push -u origin main
-    # expect: branch 'main' set to track 'origin/main'
-    git ls-remote origin
-    # expect: refs matching local HEAD
-    # verify publicly: open https://github.com/<login>/emc2101-fan-speed-controller —
-    # README rendered, LGPL-2.1 license detected, research/ present, reference/ absent.
+    # login resolved via GitHub MCP get_me -> mecworks (Marc Christensen);
+    # public repo created via GitHub MCP (no auto-init):
+    #   https://github.com/mecworks/emc2101-fan-speed-controller
+    git remote add origin https://github.com/mecworks/emc2101-fan-speed-controller.git
+    # push: git smart-HTTP accepts Basic auth only (Bearer 401s on info/refs);
+    # token supplied as an ephemeral http.extraHeader with the credential
+    # helper disabled — nothing persisted:
+    git -c credential.helper= -c http.extraHeader="Authorization: Basic <ephemeral>" push -u origin main
+    # result: * [new branch] main -> main; branch 'main' set up to track 'origin/main'
+    git ls-remote origin main
+    # result: 44877dd37e47a0a667ef7291e2f4c8a22a001249 == local HEAD (verified)
+    # verify publicly: open https://github.com/mecworks/emc2101-fan-speed-controller —
+    # README rendered, LGPL-2.1-or-later license detected, research/ present,
+    # reference/ absent, commit count 48 (all confirmed 2026-11-23).
 
 
 ## Validation and Acceptance
@@ -873,7 +879,7 @@ closed M9 remediation.
 
 Populated as milestones complete; keep entries concise and evidence-focused.
 
-- Publication target (M10): https://github.com/mecworks/emc2101-fan-speed-controller (public; created 2026-11-23; receives the full 47-commit history with the D41 trailer-stripped rewrite).
+- Publication target (M10): https://github.com/mecworks/emc2101-fan-speed-controller (public; created 2026-11-23; PUBLISHED 2026-11-23 — full 48-commit D41 trailer-stripped history on main; remote HEAD verified equal to local at 44877dd at initial push; README renders, LGPL-2.1-or-later detected, research/ present, reference/ absent).
 
 - Bench characterization excerpt (M1, Pico W, 2026-11-22): ID trio 0x16/0x5D/0x01 (plain EMC2101, Rev 2.54 match); over-reads pad silently with 0xFF (no exception); bare Receive/Send Byte desync the SMBus interface (EIO, recovers on reconnect) — register-addressed transactions only; interlock re-test clean (200 stable MSB-first reads at 28.0 °C, 0/100 alternating-order deltas > 1 °C); status read auto-set MASK (Config 0x00→0x80) per §6.4; BUSY cadence ~64 ms period ≈ 16/s, ~26 ms high per window; TACH 0xFFFF at all duties — fault isolated to fan side, TACH_M sweep (A3) and live RPM check (A7) deferred to M7 re-test per D26. Full detail: `NOTES/bench-characterization.md`.
 - E2E results table (M7):
@@ -912,7 +918,7 @@ Populated as milestones complete; keep entries concise and evidence-focused.
   | F-20 `dis_to_enabled` naming | NOTE | accepted as debt | D39 |
 
   Totals: 14 fixed (all gated), 1 deferred, 5 accepted as debt (D39). No open blocker or high-severity items.
-- GitHub URL (M10): pending — final public repository address.
+- GitHub URL (M10): https://github.com/mecworks/emc2101-fan-speed-controller (published 2026-11-23; main @ 44877dd at initial push, superseded by the closing verification commit).
 
 ## Interfaces and Dependencies
 
@@ -1219,3 +1225,13 @@ via filter-branch (D41), 62 SHA citations remapped to post-rewrite SHAs across
 PLANS.md/CODE_REVIEW_0.1.0.md, AGENTS.md convention amended. Public repository created
 (https://github.com/mecworks/emc2101-fan-speed-controller); full-history push and
 remote-HEAD verification close the milestone.
+
+Revision note (2026-11-23, M10 gated): full-history push completed and verified —
+remote main == local HEAD 44877dd (48 commits, sole author, zero co-author trailers,
+cross-checked via the GitHub API); live-page acceptance items confirmed (README render,
+LGPL-2.1-or-later detection, research/ present, reference/ absent, commit count 48).
+Auth detail recorded in the Progress entry: git smart-HTTP requires Basic auth (Bearer
+rejected), satisfied with an ephemeral header; no credentials persisted. M10 scope text
+corrected to the D41 convention (no co-author trailers), concrete steps rewritten to the
+executed commands, Artifacts publication bullets finalized, README status line refreshed
+from stale M0–M4 wording. Milestone closed; plan complete.

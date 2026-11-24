@@ -5,9 +5,9 @@ SMSC/Microchip **EMC2101** SMBus fan controller from ordinary Python on a
 Raspberry Pi Pico W (MicroPython), an ESP32-S3 (MicroPython), and a
 Raspberry Pi 3A+ (CPython/smbus2).
 
-**Status: under active development** — milestones M0–M4 are complete
-(package, protocol API, persistence) with live-silicon acceptance on the
-Pico W bench; see [`PLANS.md`](PLANS.md) (the living ExecPlan) for
+**Status: feature-complete (v0.1.0)** — milestones M0–M9 are complete
+with live-silicon acceptance on all three benches (Pico W, ESP32-S3,
+RPi 3A+); see [`PLANS.md`](PLANS.md) (the living ExecPlan) for
 milestones, decisions, and progress.
 
 ## Documentation
