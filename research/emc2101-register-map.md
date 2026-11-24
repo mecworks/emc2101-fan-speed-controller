@@ -264,3 +264,22 @@ preceded by a settling pause of at least one conversion window, and a strict rea
 should retry disagreeing registers once after such a pause. Implemented in
 `_persist.collect_state` / `apply_state` (`SETTLE_MS = 100`, decision D36) and in the
 E2E/smoke snapshot-capture dances and safety nets.
+
+
+### 16.6 External channel at room temperature: live, with a constant positive offset (bench artifact)
+
+ESP32-S3 bench (COM7), after the rotation-board move from the Pico W bench: the external
+diode channel ran ~5–6 °C above ambient/local die for hours (local 22–25 °C vs remote
+28–31 °C; wall thermometer 24 °C). Touch test (2026-11-23): finger on the PNP body drove
+the reading 29 → 38–39 °C within 15 s (held across consecutive conversions); releasing
+relaxed it 38 → 34 → 32 → 30 → 29 °C back to baseline over ~80 s. The channel is fully
+live and thermally coupled — the anomaly is a **constant positive offset** at room
+temperature, not a frozen/stuck datapath. Attribution: uncompensated series resistance in
+the breadboard/wire path (REC corrects ≤100 Ω, +0.7 °C/Ω beyond, §11) and/or a
+β/ideality mismatch for this particular PNP; note the datasheet guarantees ±1 °C external
+accuracy only over the 60–100 °C diode range, so a room-temperature offset is outside the
+guaranteed band. Related datapath clarification (datasheet §5.3/§6.9): in Normal mode the
+ADC updates all temperature channels continuously at CONV_RATE — no one-shot trigger is
+needed or effective (one-shot conversion only occurs in Standby/Mixed); corroborated live
+by BUSY-bit sightings (rapid STATUS-read counts of 5/8–8/8 during sampling). Disposition:
+bench-wiring/calibration artifact, NOT a driver defect — no code changes (user decision).
