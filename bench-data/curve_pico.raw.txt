@@ -1,0 +1,147 @@
+EMC2101 found: product 0x16, mfg 0x5d, rev 0x1
+snapshot: 40 registers captured
+non-interactive: 4 answers from /char_answers.txt
+Fan name/model (metadata): Pulses per revolution [2] Bench labelWaiting 3 s for the fan to reach full speed...
+Test the tach line now? [y/N] Driving the fan at 100 %; sensing the tach line...
+Tach live WITHOUT a pull-up (2380 rpm): the fan provides its own. Recorded: pull-up = built-in.
+Duty grid: PWM_F=31 -> 1.61 % steps (~5806.5 kHz base)
+Sweeping S=0..62 (63 levels x 5000 ms dwell)... Ctrl-C aborts safely.
+pct,rpm_settled,rpm_min,rpm_max
+0.0,708.8,683.3,1738.0
+  level  0/62    0.0 %  settled   708.8 rpm
+1.6,679.8,673.1,682.6
+  level  1/62    1.6 %  settled   679.8 rpm
+3.2,667.9,663.5,672.7
+  level  2/62    3.2 %  settled   667.9 rpm
+4.8,675.1,666.4,675.8
+  level  3/62    4.8 %  settled   675.1 rpm
+6.5,679.2,676.8,679.8
+  level  4/62    6.5 %  settled   679.2 rpm
+8.1,679.5,679.5,681.9
+  level  5/62    8.1 %  settled   679.5 rpm
+9.7,682.2,680.5,686.4
+  level  6/62    9.7 %  settled   682.2 rpm
+11.3,684.5,682.2,685.4
+  level  7/62   11.3 %  settled   684.5 rpm
+12.9,679.8,678.5,682.9
+  level  8/62   12.9 %  settled   679.8 rpm
+14.5,681.6,679.2,683.6
+  level  9/62   14.5 %  settled   681.6 rpm
+16.1,678.5,676.8,679.5
+  level 10/62   16.1 %  settled   678.5 rpm
+17.7,677.1,676.1,677.8
+  level 11/62   17.7 %  settled   677.1 rpm
+19.4,677.5,676.4,678.5
+  level 12/62   19.4 %  settled   677.5 rpm
+21.0,687.3,678.1,689.2
+  level 13/62   21.0 %  settled   687.3 rpm
+22.6,719.1,694.9,724.0
+  level 14/62   22.6 %  settled   719.1 rpm
+24.2,753.7,729.8,756.8
+  level 15/62   24.2 %  settled   753.7 rpm
+25.8,789.1,763.7,791.4
+  level 16/62   25.8 %  settled   789.1 rpm
+27.4,828.1,798.0,835.0
+  level 17/62   27.4 %  settled   828.1 rpm
+29.0,864.7,842.3,873.4
+  level 18/62   29.0 %  settled   864.7 rpm
+30.6,893.3,880.2,895.4
+  level 19/62   30.6 %  settled   893.3 rpm
+32.3,929.6,902.0,931.2
+  level 20/62   32.3 %  settled   929.6 rpm
+33.9,962.4,938.3,963.1
+  level 21/62   33.9 %  settled   962.4 rpm
+35.5,996.9,973.5,998.7
+  level 22/62   35.5 %  settled   996.9 rpm
+37.1,1031.5,1007.7,1033.1
+  level 23/62   37.1 %  settled  1031.5 rpm
+38.7,1064.0,1041.9,1066.6
+  level 24/62   38.7 %  settled  1064.0 rpm
+40.3,1096.4,1073.3,1105.0
+  level 25/62   40.3 %  settled  1096.4 rpm
+41.9,1140.4,1115.0,1141.4
+  level 26/62   41.9 %  settled  1140.4 rpm
+43.5,1173.1,1152.1,1175.2
+  level 27/62   43.5 %  settled  1173.1 rpm
+45.2,1207.8,1185.5,1209.9
+  level 28/62   45.2 %  settled  1207.8 rpm
+46.8,1241.7,1219.8,1244.5
+  level 29/62   46.8 %  settled  1241.7 rpm
+48.4,1272.7,1251.4,1273.9
+  level 30/62   48.4 %  settled  1272.7 rpm
+50.0,1307.2,1283.6,1309.7
+  level 31/62   50.0 %  settled  1307.2 rpm
+51.6,1339.6,1321.3,1342.3
+  level 32/62   51.6 %  settled  1339.6 rpm
+53.2,1375.1,1353.0,1377.9
+  level 33/62   53.2 %  settled  1375.1 rpm
+54.8,1403.0,1389.2,1406.6
+  level 34/62   54.8 %  settled  1403.0 rpm
+56.5,1452.0,1419.9,1456.7
+  level 35/62   56.5 %  settled  1452.0 rpm
+58.1,1475.0,1464.6,1483.9
+  level 36/62   58.1 %  settled  1475.0 rpm
+59.7,1519.0,1492.1,1524.1
+  level 37/62   59.7 %  settled  1519.0 rpm
+61.3,1550.4,1529.3,1555.7
+  level 38/62   61.3 %  settled  1550.4 rpm
+62.9,1585.0,1564.8,1586.8
+  level 39/62   62.9 %  settled  1585.0 rpm
+64.5,1619.2,1598.1,1619.2
+  level 40/62   64.5 %  settled  1619.2 rpm
+66.1,1648.9,1629.0,1650.9
+  level 41/62   66.1 %  settled  1648.9 rpm
+67.7,1682.8,1661.0,1690.1
+  level 42/62   67.7 %  settled  1682.8 rpm
+69.4,1724.7,1705.1,1726.9
+  level 43/62   69.4 %  settled  1724.7 rpm
+71.0,1759.5,1735.8,1760.7
+  level 44/62   71.0 %  settled  1759.5 rpm
+72.6,1793.4,1769.9,1795.8
+  level 45/62   72.6 %  settled  1793.4 rpm
+74.2,1822.5,1803.0,1827.4
+  level 46/62   74.2 %  settled  1822.5 rpm
+75.8,1860.1,1832.4,1862.7
+  level 47/62   75.8 %  settled  1860.1 rpm
+77.4,1875.7,1862.7,1888.8
+  level 48/62   77.4 %  settled  1875.7 rpm
+79.0,1926.5,1886.1,1937.6
+  level 49/62   79.0 %  settled  1926.5 rpm
+80.6,1961.5,1945.9,1965.8
+  level 50/62   80.6 %  settled  1961.5 rpm
+82.3,1994.8,1977.3,2000.7
+  level 51/62   82.3 %  settled  1994.8 rpm
+83.9,2030.8,2009.7,2040.0
+  level 52/62   83.9 %  settled  2030.8 rpm
+85.5,2068.2,2046.2,2077.7
+  level 53/62   85.5 %  settled  2068.2 rpm
+87.1,2093.8,2087.4,2097.1
+  level 54/62   87.1 %  settled  2093.8 rpm
+88.7,2130.2,2110.2,2133.5
+  level 55/62   88.7 %  settled  2130.2 rpm
+90.3,2167.8,2143.7,2174.8
+  level 56/62   90.3 %  settled  2167.8 rpm
+91.9,2199.6,2178.3,2199.6
+  level 57/62   91.9 %  settled  2199.6 rpm
+93.5,2236.0,2210.4,2239.7
+  level 58/62   93.5 %  settled  2236.0 rpm
+95.2,2262.3,2243.5,2262.3
+  level 59/62   95.2 %  settled  2262.3 rpm
+96.8,2304.7,2285.2,2304.7
+  level 60/62   96.8 %  settled  2304.7 rpm
+98.4,2348.8,2316.6,2357.0
+  level 61/62   98.4 %  settled  2348.8 rpm
+100.0,2367.4,2361.2,2369.5
+  level 62/62  100.0 %  settled  2367.4 rpm
+
+Fan curve summary - Bench fan
+-----------------------------
+1) Fan NEVER STOPS: holds a ~682 rpm floor at 0 % drive.
+2) Speed begins rising above its ~682 rpm floor at ~24.2 % PWM.
+3) Linearity: max deviation +16 rpm (1.0 % of span) at 98.4 % duty; RMS 6 rpm vs the ideal linear curve.
+4) Speed still increasing at 100 %% PWM (no saturation observed).
+[PASS] safety-net restore byte-for-byte (40 regs)
+Traceback (most recent call last):
+  File "<stdin>", line 484, in <module>
+  File "<stdin>", line 448, in main
+AttributeError: 'module' object has no attribute 'strftime'

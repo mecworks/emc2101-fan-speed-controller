@@ -61,6 +61,19 @@ running that command yields `curve.png` and `curve.meta.json`.
     FAN_CFG; all four gates green and the throwaway dry-run harness reports ALL PASS
     (termination, byte-for-byte restore, CSV shape) on all three pre-flight outcomes
     and the dead-tach abort. Live sweep pending.
+  - (2026-11-24) **Pico W leg COMPLETE** — live run captured end-to-end (artifacts in
+    `bench-data/`: `curve_pico.{csv,png,meta.json,raw.txt}`). Tach pre-flight test path
+    verified on real hardware: live at 100 % WITHOUT a pull-up (2382 rpm) → recorded
+    built-in. Full 63-level sweep in ~5.5 min; header + 63 rows extracted clean from
+    the merged capture; `[PASS] safety-net restore byte-for-byte (40 regs)`. Four
+    answers: fan never stops (~682 rpm floor), onset ~24.2 %, max deviation +16 rpm
+    (1.0 % of span) / RMS 6 rpm vs the ideal line, no saturation at 100 %. Rendered
+    `curve_pico.png` matches the reference style (chord 754@24% -> 2367@100%, onset
+    marker, metadata footer). The 0 % stale-latch leaked only into rpm_max (1738);
+    the discard window held the settled value (708.8), so no anomaly flag fired —
+    correct per contract. Two late MicroPython gaps found on the live bench and fixed
+    (no-flush stdout under mpremote, absent time.strftime); harness extended to cover
+    both. RPi native leg still pending bench loadout (breakout not yet on bus 1).
 
 ## Surprises & Discoveries
 
@@ -97,6 +110,15 @@ running that command yields `curve.png` and `curve.meta.json`.
   a chip starting in auto/LUT mode would have been restored into manual program
   mode. Fixed by storing the original pre-toggle value; the harness now asserts
   byte-for-byte drift-free restore from both PROG=0 and PROG=1 seeds.
+- (2026-11-24, U4) Late MicroPython console gaps surfaced only on the live bench:
+  under mpremote the device's sys.stdout is a TextIOWrapper WITHOUT flush() — the
+  bare sys.stdout.flush() in the sweep loop aborted the first live run right after
+  the CSV header (no data lost: the abort preceded any row and the finally-block
+  restore still ran and PASSED) — and time.strftime does not exist, which crashed
+  the post-summary date line after all 63 rows were already captured. Both are now
+  guarded with try/except AttributeError (flush_stdout() helper; date falls back to
+  "unknown" with an explicit --date at render time), and the dry-run harness
+  simulates a no-flush stdout and a broken strftime so these stay covered.
 
 ## Decision Log
 

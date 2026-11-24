@@ -1,0 +1,30 @@
+{
+  "fan": "Cooler Master SickleFlow 92",
+  "bench": "Pico W (COM16)",
+  "date": "2026-11-24",
+  "pullup": "built-in",
+  "ppr": 2,
+  "grid": "duty grid: raw S=0..62 @ PWM_F=31 (~1.6 % steps)",
+  "source_csv": "C:\\Users\\mecwo\\Documents\\ChatboxAI Sandbox\\EMC2101_Fan_Speed_controller\\curve_pico.csv",
+  "analysis": {
+    "turns_off": false,
+    "floor_rpm": 682.2,
+    "onset_pct": 24.2,
+    "onset_rpm": 753.7,
+    "linearity": {
+      "max_dev_rpm": 15.462269129287506,
+      "max_dev_pct_of_span": 0.9581873414691395,
+      "at_pct": 98.4,
+      "rms_rpm": 6.397976965355182,
+      "ref_line": [
+        24.2,
+        753.7,
+        100.0,
+        2367.4
+      ]
+    },
+    "ceiling_pct": null,
+    "zero_flag": null,
+    "peak_rpm": 2367.4
+  }
+}

@@ -6,25 +6,38 @@ the chip's finest duty grid, ~1.6 % steps) holding each level for 5 s and
 sampling the tach every 250 ms. Emits a CSV in the established bench-data
 format (``pct,rpm_settled,rpm_min,rpm_max``) to **stdout** and everything
 else -- prompts, progress, the four-answer summary, and a ready-to-paste
-renderer command -- to **stderr**, so remote runs capture cleanly:
+renderer command -- to **stderr**.
 
-    Pico W (remote):
-        python -m mpremote connect port:COM16 fsync examples
-        python -m mpremote connect port:COM16 run examples/fan_characterize.py > curve.csv
-    ESP32-S3 (remote):
-        python -m mpremote connect port:COM7 fsync examples
-        python -m mpremote connect port:COM7 run examples/fan_characterize.py > curve.csv
-    Raspberry Pi 3A+ (native, on the Pi):
-        python3 examples/fan_characterize.py --save curve.csv
+Remote runs (Pico W / ESP32-S3 via mpremote 1.29.0), verified procedure:
 
-The ``fsync examples`` step deploys the shared analysis module
-(_fan_curve_math.py) next to this script on the device. Render the PNG on
-any host with matplotlib using the command printed at the end of the run
-(tools/render_curve.py). Self-restoring: snapshots the writable registers
-and restores + verifies them byte-for-byte before exiting, even on
-Ctrl-C. Runtime ~5.5 minutes. Prerequisites: a real 4-wire fan on
-FAN+/FAN- with its own supply (see docs/wiring.md); the diode channel is
-not used by this utility.
+    1. Deploy the package (tools/deploy_mp.py) and push the shared analysis
+       module (_fan_curve_math.py) to the device root with the exec/base64
+       technique from tools/deploy_mp.py (mpremote's fs cp fails on the
+       root FS; `run`'s own script upload works fine).
+    2. Stage the answer file /char_answers.txt on the device (one line per
+       prompt: fan name, pulses/rev, bench label, tach-test y/n).
+    3. Capture:  python -u -m mpremote connect port:COM16 \
+                   run examples/fan_characterize.py > curve_raw.txt
+       The MicroPython console is a single stream, so the capture mixes the
+       CSV rows with the stderr chatter; keep only the header plus lines of
+       four comma-separated numbers to recover the pure CSV.
+    4. Render the PNG on any host with matplotlib (tools/render_curve.py)
+       using the command printed at the end of the run.
+
+Raspberry Pi 3A+ (native, on the Pi):
+    python3 examples/fan_characterize.py --save curve.csv
+
+Non-interactive: mpremote does not forward redirected host stdin to the
+device (input() would block forever) and does not pass post-script
+arguments to ``run``, so remote runs read their answers from the
+device-local /char_answers.txt when present; an absent file falls back to
+stdin, and exhausted or closed input falls back to the prompt defaults, so
+every pre-flight path terminates.
+
+Self-restoring: snapshots the writable registers and restores + verifies
+them byte-for-byte before exiting, even on Ctrl-C. Runtime ~5.5 minutes.
+Prerequisites: a real 4-wire fan on FAN+/FAN- with its own supply (see
+docs/wiring.md); the diode channel is not used by this utility.
 """
 import os
 import sys
@@ -68,6 +81,16 @@ def eprint(line=""):
     sys.stderr.write(line + "\n")
     try:
         sys.stderr.flush()
+    except AttributeError:
+        pass
+
+
+def flush_stdout():
+    """Best-effort stdout flush: MicroPython's TextIOWrapper (the stream
+    mpremote hands the console) has no flush(), and print() still reaches
+    the wire without one."""
+    try:
+        sys.stdout.flush()
     except AttributeError:
         pass
 
@@ -415,7 +438,7 @@ def main(argv):
                                    SWEEP_MAX_SETTING + 1,
                                    opts["settle_ms"]))
         print(CSV_HEADER)                 # stdout: CSV stream only
-        sys.stdout.flush()
+        flush_stdout()
         rows = []
         for s in range(SWEEP_MAX_SETTING + 1):
             dev.duty_cmd_raw = s
@@ -427,7 +450,7 @@ def main(argv):
             line = format_csv_row(pct, settled, rmin, rmax)
             csv_lines.append(line)
             print(line)                    # stdout: CSV stream only
-            sys.stdout.flush()             # survive block-buffered pipes
+            flush_stdout()                 # survive block-buffered pipes
             eprint("  level %2d/%d  %5.1f %%  settled %7.1f rpm"
                    % (s, SWEEP_MAX_SETTING, pct, settled))
 
@@ -435,7 +458,11 @@ def main(argv):
         res = analyze(rows)
         eprint("")
         eprint(format_summary(res, fan_name=fan_name))
-        date = time.strftime("%Y-%m-%d")
+        try:
+            date = time.strftime("%Y-%m-%d")
+        except AttributeError:
+            date = "unknown"   # MicroPython has no strftime; pass --date
+                               # explicitly when rendering
         eprint("")
         eprint("Save the CSV stream (CURVE.csv below) and render the PNG "
                "on any host with matplotlib:")
