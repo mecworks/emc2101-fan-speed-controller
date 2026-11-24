@@ -236,7 +236,9 @@ def sec_manual_duty_pwm():
     dev.dac_enabled = False
     expect(dev.dac_enabled is False, "DAC mode off")
     dev.manual = False
-    dev.set_duty_pct(0)
+    # No duty write here: while PROG=0 the Fan Setting register is
+    # read-only (§16.2), so a set_duty_pct() would be silently dropped;
+    # the final byte-for-byte restore is covered by the safety net.
 
 
 # ------------------------------------------------------------------ S4
@@ -328,7 +330,9 @@ def sec_tach_rpm():
            "TACH_M sentinel encoding round trip")
     dev.tach_mode = orig_tm
     dev.manual = False
-    dev.set_duty_pct(0)
+    # No duty write here: while PROG=0 the Fan Setting register is
+    # read-only (§16.2), so a set_duty_pct() would be silently dropped;
+    # the final byte-for-byte restore is covered by the safety net.
 
 
 # ------------------------------------------------------------------ S6

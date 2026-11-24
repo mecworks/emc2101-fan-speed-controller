@@ -7,11 +7,10 @@ SDA=GPIO41/SCL=GPIO42), and Raspberry Pi 3A+ (CPython/smbus2, bus 1).
 The filename is the conventional entry point for the named bench.
 
 Demo flow: verify -> print temperatures -> configure 4-wire fan ->
-manual duty sweep with RPM reporting -> save config -> restore a calm
-state (POR-equivalent: manual drive at 0 %, fan at floor speed).
-The saved JSON profile persists across
-reboots; construct with config_file=<path> (or call load_config()) to
-apply it automatically.
+manual duty sweep with RPM reporting -> restore a calm state (manual
+drive at 0 % = floor speed) -> save that state as the persistent JSON
+profile. Construct with config_file=<path> (or call load_config()) to
+apply the profile automatically after reboot.
 
 Prerequisite: the emc2101 package must be deployed to the MCU
 (`python -m mpremote connect port:COM16 fsync ./emc2101`).
@@ -62,11 +61,11 @@ def main():
         print("duty %3d %% -> raw %2d, %.0f RPM"
               % (pct, dev.duty_cmd_raw, dev.rpm()))
 
-    path = dev.save_config()
-    print("config saved to %s" % path)
-
     dev.set_duty_pct(0)                     # manual drive at 0 % = floor speed
-    print("calm state restored: manual drive at 0 %% (POR-equivalent)")
+    print("calm state restored: manual drive at 0 %% (floor speed)")
+
+    path = dev.save_config()                # persist the calm state
+    print("config saved to %s" % path)
     dev.close()
 
 
