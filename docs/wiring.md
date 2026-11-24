@@ -25,6 +25,10 @@ The chip's I/O pins are 5 V-tolerant, but the supply itself must stay in
 | ESP32-S3 | MicroPython ≥ 1.29 | I2C0 | GPIO41 | GPIO42 |
 | Raspberry Pi 3A+ | CPython + smbus2 | SMBus bus 1 (`/dev/i2c-1`) | header pin 3 (SDA1) | header pin 5 (SCL1) |
 
+On the Raspberry Pi 3A+ header, feed the breakout's VIN from **pin 1
+(3 V3)**. Pins 2 and 4 are the 5 V rail and must not power the 3.0–3.6 V
+supply; ground goes to pin 6.
+
 On the Pico W / ESP32-S3 you can wire the breakout straight onto the
 STEMMA QT connector of a carrier board that routes those exact pins;
 otherwise jumper SDA/SCL/VIN/GND from the breakout to the host headers.
